@@ -63,6 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     },
     { name: 'Kemajuan Studi', path: '/student/academic-progress', icon: Award },
     { name: 'Transkrip & KHS', path: '/student/grades', icon: ClipboardList },
+    { name: 'Riwayat Akademik', path: '/student/academic-history', icon: History },
     { name: 'Presensi Kehadiran', path: '/student/attendance', icon: CheckSquare },
     { name: 'Jadwal Kuliah', path: '/student/schedule', icon: Calendar },
     { name: 'Konsultasi Dosen PA', path: '/student/consultation', icon: MessageSquare },
