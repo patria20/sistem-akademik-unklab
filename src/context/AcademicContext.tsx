@@ -79,16 +79,16 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const all = AcademicService.getAllGrades();
     setAllGrades(all);
 
+    // Nilai hanya milik mahasiswa yang login. Akun tanpa data mahasiswa tidak mendapat nilai siapa pun.
     const loggedStudent = currentStudents.find((s) => s.userId === user?.id);
-    const targetStudentId = loggedStudent ? loggedStudent.id : 'std_01';
-    setGrades(AcademicService.getGradesByStudentId(targetStudentId));
+    setGrades(loggedStudent ? AcademicService.getGradesByStudentId(loggedStudent.id) : []);
   }, [user]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  const activeStudent = students.find((s) => s.userId === user?.id) || students[0];
+  const activeStudent = students.find((s) => s.userId === user?.id);
   const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
   const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
 

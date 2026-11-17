@@ -1,65 +1,57 @@
 import React, { useMemo } from 'react';
-import { BookCheck, CheckCircle2, GraduationCap, Layers, XCircle } from 'lucide-react';
+import { BookCheck, CheckCircle2, Clock, GraduationCap, Layers, XCircle } from 'lucide-react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
-import { PASSING_GRADES, calculateSemesterGPA } from '../../utils/gpaCalculator';
-import type { GradeRecord } from '../../types/academic';
-
-interface SemesterGroup {
-  semester: number;
-  academicYear: string;
-  records: GradeRecord[];
-  credits: number;
-  gpa: number;
-}
+import { PASSING_GRADES } from '../../utils/gpaCalculator';
+import { buildAcademicHistory } from '../../utils/academicHistory';
 
 export const AcademicHistoryPage: React.FC = () => {
   const { activeStudent, grades } = useAcademic();
   const currentSemester = activeStudent?.currentSemester ?? 0;
 
-  // Hanya mata kuliah dari semester sebelum semester berjalan, dikelompokkan per semester.
-  const groups = useMemo<SemesterGroup[]>(() => {
-    const bySemester = new Map<number, GradeRecord[]>();
-    for (const g of grades) {
-      if (g.semester >= currentSemester) continue;
-      bySemester.set(g.semester, [...(bySemester.get(g.semester) ?? []), g]);
-    }
-    return [...bySemester.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([semester, records]) => ({
-        semester,
-        academicYear: records[0].academicYear,
-        records,
-        credits: records.reduce((sum, r) => sum + r.credits, 0),
-        gpa: calculateSemesterGPA(records),
-      }));
-  }, [grades, currentSemester]);
+  // `grades` sudah milik mahasiswa yang login; perhitungan ada di utils/academicHistory.ts.
+  const history = useMemo(
+    () => buildAcademicHistory(grades, currentSemester),
+    [grades, currentSemester],
+  );
 
-  if (!activeStudent) return null;
+  const header = (
+    <PageHeader
+      title="Riwayat Akademik"
+      subtitle="Mata kuliah yang sudah kamu ambil pada semester-semester sebelumnya."
+      breadcrumbs={[
+        { label: 'Mahasiswa', path: '/student/dashboard' },
+        { label: 'Riwayat Akademik' },
+      ]}
+    />
+  );
 
-  const allRecords = groups.flatMap((g) => g.records);
-  const passedCredits = allRecords
-    .filter((r) => PASSING_GRADES.includes(r.letterGrade))
-    .reduce((sum, r) => sum + r.credits, 0);
-  const cumulativeGpa = calculateSemesterGPA(allRecords);
+  if (!activeStudent) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <BookCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+          <p className="text-sm font-semibold text-slate-700">Data mahasiswa tidak ditemukan</p>
+          <p className="text-xs text-slate-500 mt-1">
+            Akun ini belum terhubung dengan data mahasiswa. Hubungi admin akademik.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
+  const { groups } = history;
   const stats = [
     { label: 'Semester Selesai', value: groups.length, icon: Layers },
-    { label: 'Mata Kuliah Diambil', value: allRecords.length, icon: BookCheck },
-    { label: 'SKS Lulus', value: passedCredits, icon: CheckCircle2 },
-    { label: 'IPK', value: cumulativeGpa.toFixed(2), icon: GraduationCap },
+    { label: 'Mata Kuliah Diambil', value: history.courseCount, icon: BookCheck },
+    { label: 'SKS Lulus', value: history.passedCredits, icon: CheckCircle2 },
+    { label: 'IPK', value: history.cumulativeGpa.toFixed(2), icon: GraduationCap },
   ];
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Riwayat Akademik"
-        subtitle="Mata kuliah yang sudah kamu ambil pada semester-semester sebelumnya."
-        breadcrumbs={[
-          { label: 'Mahasiswa', path: '/student/dashboard' },
-          { label: 'Riwayat Akademik' },
-        ]}
-      />
+      {header}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {stats.map((s) => {
@@ -92,7 +84,7 @@ export const AcademicHistoryPage: React.FC = () => {
       ) : (
         groups.map((group) => (
           <section
-            key={group.semester}
+            key={group.key}
             className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-b border-slate-100 bg-slate-50/60">
@@ -122,7 +114,7 @@ export const AcademicHistoryPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {group.records.map((r) => (
+                  {group.rows.map(({ record: r, countedInCumulative }) => (
                     <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-3 px-5 font-mono font-semibold text-blue-700">
                         {r.courseCode}
@@ -133,17 +125,32 @@ export const AcademicHistoryPage: React.FC = () => {
                         {r.letterGrade}
                       </td>
                       <td className="py-3 px-5">
-                        {r.isPassed ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Lulus
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-rose-50 text-rose-700 border-rose-200">
-                            <XCircle className="w-3 h-3" />
-                            Tidak Lulus
-                          </span>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {r.letterGrade === 'IP' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-amber-50 text-amber-700 border-amber-200">
+                              <Clock className="w-3 h-3" />
+                              Berjalan
+                            </span>
+                          ) : PASSING_GRADES.includes(r.letterGrade) ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Lulus
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-rose-50 text-rose-700 border-rose-200">
+                              <XCircle className="w-3 h-3" />
+                              Tidak Lulus
+                            </span>
+                          )}
+                          {!countedInCumulative && (
+                            <span
+                              title="Mata kuliah ini diulang. Nilai ini tidak dipakai untuk IPK dan SKS lulus."
+                              className="px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-slate-50 text-slate-600 border-slate-200"
+                            >
+                              Diulang
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
