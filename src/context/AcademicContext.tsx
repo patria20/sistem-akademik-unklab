@@ -34,6 +34,7 @@ interface AcademicContextType {
   reviewKrs: (krsId: string, decision: 'approved' | 'revision', feedback: string) => void;
   requestAttendanceCorrection: (attendanceId: string, reason: string) => void;
   approveAttendanceCorrection: (attendanceId: string, approved: boolean) => void;
+  saveAttendanceRecords: (records: AttendanceRecord[]) => void;
   createConsultation: (lecturerId: string, topic: string, message: string) => void;
   replyConsultation: (id: string, reply: string, scheduledDate?: string) => void;
   markNotificationAsRead: (id: string) => void;
@@ -109,6 +110,11 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshData();
   };
 
+  const handleSaveAttendanceRecords = (records: AttendanceRecord[]) => {
+    AcademicService.saveAttendanceRecords(records);
+    refreshData();
+  };
+
   const handleCreateConsultation = (lecturerId: string, topic: string, message: string) => {
     if (!activeStudent) return;
     const targetLec = lecturers.find((l) => l.id === lecturerId) || lecturers[0];
@@ -166,6 +172,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         reviewKrs: handleReviewKrs,
         requestAttendanceCorrection: handleRequestAttendanceCorrection,
         approveAttendanceCorrection: handleApproveAttendanceCorrection,
+        saveAttendanceRecords: handleSaveAttendanceRecords,
         createConsultation: handleCreateConsultation,
         replyConsultation: handleReplyConsultation,
         markNotificationAsRead: handleMarkNotificationAsRead,
