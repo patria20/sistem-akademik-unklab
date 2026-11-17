@@ -118,9 +118,18 @@ export interface GradeRecord {
   credits: number;
   semester: number;
   academicYear: string;
+  score?: number; // 0 - 100
+  componentScores?: {
+    tugas: number;
+    uts: number;
+    uas: number;
+  };
+  classId?: string;
+  lecturerName?: string;
   letterGrade: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'D' | 'F' | 'IP';
   gradePoint: number; // 4.0, 3.75, 3.5, etc.
   isPassed: boolean;
+  updatedAt?: string;
 }
 
 export interface AttendanceRecord {

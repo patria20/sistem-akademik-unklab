@@ -25,7 +25,6 @@ export const SchedulePage: React.FC = () => {
   const [selectedClass, setSelectedClass] = useState<CourseClass | null>(null);
   const [activeDayFilter, setActiveDayFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [calendarMonth, setCalendarMonth] = useState('Agustus 2026');
 
   if (!activeStudent) return null;
 
@@ -33,6 +32,15 @@ export const SchedulePage: React.FC = () => {
   const enrolledClasses = classes.filter((c) => enrolledClassIds.includes(c.id));
 
   const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat'] as const;
+
+  // Kalender mini dihitung dari tanggal hari ini, bukan angka yang ditulis tetap.
+  const WEEKDAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+  const today = new Date();
+  const monthLabel = today.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  // Kolom pertama kalender adalah Senin, jadi geser getDay() (Minggu = 0) agar Senin = 0.
+  const firstColumn = (new Date(today.getFullYear(), today.getMonth(), 1).getDay() + 6) % 7;
+  const classDays = new Set<string>(enrolledClasses.map((c) => c.day));
   const timeSlots = [
     '07:00 - 08:40',
     '09:00 - 10:40',
@@ -64,7 +72,7 @@ export const SchedulePage: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="Jadwal Perkuliahan Mahasiswa"
-        subtitle="Matriks perkuliahan terdaftar Semester Ganjil 2026/2027 • Universitas Klabat"
+        subtitle={`Matriks perkuliahan terdaftar Semester ${activeStudent.academicYear} • Universitas Klabat`}
         breadcrumbs={[
           { label: 'Mahasiswa', path: '/student/dashboard' },
           { label: 'Jadwal Kuliah' },
@@ -123,7 +131,7 @@ export const SchedulePage: React.FC = () => {
                 Kalender Akademik
               </h3>
               <div className="flex items-center gap-1 text-xs font-bold text-slate-600">
-                <span>{calendarMonth}</span>
+                <span>{monthLabel}</span>
               </div>
             </div>
 
@@ -140,9 +148,14 @@ export const SchedulePage: React.FC = () => {
 
             {/* Days numbers */}
             <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-slate-700">
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                const isSelected = day === 10;
-                const hasClass = [3, 5, 8, 10, 12, 17, 19, 24].includes(day);
+              {Array.from({ length: firstColumn }, (_, i) => (
+                <span key={`blank-${i}`} />
+              ))}
+              {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                const isSelected = day === today.getDate();
+                const weekdayName =
+                  WEEKDAY_NAMES[new Date(today.getFullYear(), today.getMonth(), day).getDay()];
+                const hasClass = classDays.has(weekdayName);
 
                 return (
                   <button
@@ -175,6 +188,11 @@ export const SchedulePage: React.FC = () => {
             </div>
 
             <div className="space-y-3">
+              {enrolledClasses.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-[11px] text-slate-500">
+                  Jadwal belum tersedia. Jadwal muncul setelah KRS kamu terisi.
+                </div>
+              )}
               {enrolledClasses.map((cls) => (
                 <div
                   key={cls.id}
@@ -213,14 +231,6 @@ export const SchedulePage: React.FC = () => {
               <p className="text-[11px] text-slate-500">
                 Klik kartu sesi mata kuliah untuk melihat rincian ruang, dosen, dan silabus.
               </p>
-            </div>
-            <div className="flex items-center gap-2 text-[11px] font-bold text-slate-500">
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-blue-500" /> Reguler
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Lab / Praktikum
-              </span>
             </div>
           </div>
 
