@@ -12,7 +12,7 @@ import type {
   AuditLog,
   GradeRecord,
 } from '../types/academic';
-import { AcademicService } from '../services/academicService';
+import { AcademicService, type ClassGradeInput } from '../services/academicService';
 import { useAuth } from './AuthContext';
 
 interface AcademicContextType {
@@ -26,6 +26,7 @@ interface AcademicContextType {
   notifications: SystemNotification[];
   auditLogs: AuditLog[];
   grades: GradeRecord[];
+  allGrades: GradeRecord[];
   activeStudent: StudentProfile | undefined;
   activeLecturer: LecturerProfile | undefined;
   activeKrs: StudyPlan | undefined;
@@ -39,6 +40,9 @@ interface AcademicContextType {
   markNotificationAsRead: (id: string) => void;
   addNewCourse: (course: Course) => void;
   addNewClass: (cls: CourseClass) => void;
+  saveClassGrades: (classId: string, inputs: ClassGradeInput[]) => GradeRecord[];
+  getGradesByClassId: (classId: string) => GradeRecord[];
+  resetGradesToDefault: () => void;
   refreshData: () => void;
 }
 
@@ -57,10 +61,12 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [grades, setGrades] = useState<GradeRecord[]>([]);
+  const [allGrades, setAllGrades] = useState<GradeRecord[]>([]);
 
   const refreshData = useCallback(() => {
     AcademicService.initialize();
-    setStudents(AcademicService.getStudents());
+    const currentStudents = AcademicService.getStudents();
+    setStudents(currentStudents);
     setLecturers(AcademicService.getLecturers());
     setCourses(AcademicService.getCourses());
     setClasses(AcademicService.getClasses());
@@ -69,8 +75,14 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setConsultations(AcademicService.getConsultations());
     setNotifications(AcademicService.getNotifications());
     setAuditLogs(AcademicService.getAuditLogs());
-    setGrades(AcademicService.getGradesByStudentId('std_01'));
-  }, []);
+
+    const all = AcademicService.getAllGrades();
+    setAllGrades(all);
+
+    const loggedStudent = currentStudents.find((s) => s.userId === user?.id);
+    const targetStudentId = loggedStudent ? loggedStudent.id : 'std_01';
+    setGrades(AcademicService.getGradesByStudentId(targetStudentId));
+  }, [user]);
 
   useEffect(() => {
     refreshData();
@@ -145,6 +157,22 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshData();
   };
 
+  const handleSaveClassGrades = (classId: string, inputs: ClassGradeInput[]) => {
+    const lecturerName = user?.name || activeLecturer?.name || 'Semmy W. Taju, S.Kom., M.S., Ph.D.';
+    const result = AcademicService.saveClassGrades(classId, inputs, lecturerName);
+    refreshData();
+    return result;
+  };
+
+  const handleGetGradesByClassId = (classId: string) => {
+    return AcademicService.getGradesByClassId(classId);
+  };
+
+  const handleResetGradesToDefault = () => {
+    AcademicService.resetGradesToDefault();
+    refreshData();
+  };
+
   return (
     <AcademicContext.Provider
       value={{
@@ -158,6 +186,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         notifications,
         auditLogs,
         grades,
+        allGrades,
         activeStudent,
         activeLecturer,
         activeKrs,
@@ -171,6 +200,9 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         markNotificationAsRead: handleMarkNotificationAsRead,
         addNewCourse: handleAddNewCourse,
         addNewClass: handleAddNewClass,
+        saveClassGrades: handleSaveClassGrades,
+        getGradesByClassId: handleGetGradesByClassId,
+        resetGradesToDefault: handleResetGradesToDefault,
         refreshData,
       }}
     >
