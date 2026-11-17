@@ -16,7 +16,7 @@ import { StudyPlanPage } from '../pages/student/StudyPlanPage';
 import { AcademicProgressPage } from '../pages/student/AcademicProgressPage';
 import { GradesPage } from '../pages/student/GradesPage';
 import { AcademicHistoryPage } from '../pages/student/AcademicHistoryPage';
-import { AttendancePage } from '../pages/student/AttendancePage';
+import { ReportProblemPage } from '../pages/student/ReportProblemPage';
 import { SchedulePage } from '../pages/student/SchedulePage';
 import { ConsultationPage } from '../pages/student/ConsultationPage';
 import { AIAssistantPage } from '../pages/student/AIAssistantPage';
@@ -110,10 +110,10 @@ export const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path="/student/attendance"
+          path="/student/report-problem"
           element={
             <RoleRouteGuard allowedRole="student">
-              <AttendancePage />
+              <ReportProblemPage />
             </RoleRouteGuard>
           }
         />
