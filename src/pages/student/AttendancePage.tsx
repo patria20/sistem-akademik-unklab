@@ -6,7 +6,6 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import {
   CheckSquare,
   Clock,
-  AlertTriangle,
   UserX,
   FileEdit,
   CheckCircle2,
@@ -27,11 +26,15 @@ export const AttendancePage: React.FC = () => {
 
   const totalMeetings = attendances.length;
   const hadirCount = attendances.filter((a) => a.status === 'hadir').length;
+  const terlambatCount = attendances.filter((a) => a.status === 'terlambat').length;
   const izinCount = attendances.filter((a) => a.status === 'izin').length;
   const sakitCount = attendances.filter((a) => a.status === 'sakit').length;
   const alpaCount = attendances.filter((a) => a.status === 'alpa').length;
 
-  const attendancePercentage = totalMeetings > 0 ? Math.round(((hadirCount + izinCount) / totalMeetings) * 100) : 100;
+  const attendancePercentage =
+    totalMeetings > 0
+      ? Math.round(((hadirCount + terlambatCount + izinCount) / totalMeetings) * 100)
+      : 100;
 
   const handleOpenCorrection = (record: AttendanceRecord) => {
     setSelectedRecord(record);
@@ -65,7 +68,7 @@ export const AttendancePage: React.FC = () => {
       )}
 
       {/* Top 4 KPI Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Persentase Kehadiran"
           value={`${attendancePercentage}%`}
@@ -82,6 +85,14 @@ export const AttendancePage: React.FC = () => {
           icon={CheckCircle2}
           iconColor="text-blue-600"
           iconBg="bg-blue-50"
+        />
+        <StatCard
+          title="Terlambat"
+          value={`${terlambatCount} Sesi`}
+          subtitle="Tetap dihitung dalam kehadiran"
+          icon={Clock}
+          iconColor="text-amber-600"
+          iconBg="bg-amber-50"
         />
         <StatCard
           title="Izin / Sakit"
@@ -145,7 +156,9 @@ export const AttendancePage: React.FC = () => {
                           <Clock className="w-3 h-3" />
                           {rec.correctionStatus === 'approved'
                             ? 'Koreksi Disetujui'
-                            : 'Koreksi Diajukan'}
+                            : rec.correctionStatus === 'rejected'
+                              ? 'Koreksi Ditolak'
+                              : 'Koreksi Diajukan'}
                         </span>
                         {rec.correctionReason && (
                           <p className="text-[10px] text-slate-500 italic max-w-xs truncate">

@@ -141,7 +141,7 @@ export interface AttendanceRecord {
   courseName: string;
   meetingNumber: number; // 1 to 16
   date: string;
-  status: 'hadir' | 'izin' | 'sakit' | 'alpa';
+  status: 'hadir' | 'terlambat' | 'izin' | 'sakit' | 'alpa';
   correctionRequested?: boolean;
   correctionReason?: string;
   correctionStatus?: 'none' | 'pending' | 'approved' | 'rejected';

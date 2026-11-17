@@ -416,6 +416,26 @@ export class AcademicService {
     return studentId ? list.filter((a) => a.studentId === studentId || studentId === 'std_01') : list;
   }
 
+  static saveAttendanceRecords(records: AttendanceRecord[]): void {
+    const list = this.getAttendances();
+    records.forEach((record) => {
+      const existing = list.find(
+        (item) =>
+          item.classId === record.classId &&
+          item.studentId === record.studentId &&
+          item.meetingNumber === record.meetingNumber &&
+          item.date === record.date
+      );
+
+      if (existing) {
+        existing.status = record.status;
+      } else {
+        list.push(record);
+      }
+    });
+    setStoredItem(STORAGE_KEYS.ATTENDANCES, list);
+  }
+
   static requestAttendanceCorrection(attendanceId: string, reason: string): void {
     const list = this.getAttendances();
     const item = list.find((a) => a.id === attendanceId);

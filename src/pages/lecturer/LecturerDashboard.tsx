@@ -24,7 +24,11 @@ export const LecturerDashboard: React.FC = () => {
   // Pending KRS
   const pendingKrsList = studyPlans.filter((p) => p.status === 'submitted');
   const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
-  const pendingCorrections = attendances.filter((a) => a.correctionStatus === 'pending');
+  const pendingCorrections = attendances.filter(
+    (attendance) =>
+      attendance.correctionStatus === 'pending' &&
+      lecturerClasses.some((courseClass) => courseClass.id === attendance.classId)
+  );
   const waitingConsultations = consultations.filter((c) => c.status === 'waiting');
 
   return (
