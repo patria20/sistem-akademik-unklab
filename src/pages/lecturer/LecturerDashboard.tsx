@@ -17,13 +17,16 @@ import {
 } from 'lucide-react';
 
 export const LecturerDashboard: React.FC = () => {
-  const { activeLecturer, studyPlans, classes, attendances, consultations } = useAcademic();
+  const { activeLecturer, students, studyPlans, classes, attendances, consultations } = useAcademic();
 
   if (!activeLecturer) return null;
 
   // Pending KRS
   const pendingKrsList = studyPlans.filter((p) => p.status === 'submitted');
   const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
+  const adviseeCount = students.filter(
+    (student) => student.academicAdvisorId === activeLecturer.id
+  ).length;
   const pendingCorrections = attendances.filter((a) => a.correctionStatus === 'pending');
   const waitingConsultations = consultations.filter((c) => c.status === 'waiting');
 
@@ -57,7 +60,7 @@ export const LecturerDashboard: React.FC = () => {
         />
         <StatCard
           title="Mahasiswa Bimbingan (PA)"
-          value={`${activeLecturer.adviseeCount} Orang`}
+          value={`${adviseeCount} Orang`}
           subtitle="Program Studi Informatika"
           icon={Users}
           iconColor="text-blue-600"

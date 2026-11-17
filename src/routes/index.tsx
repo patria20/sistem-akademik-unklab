@@ -24,6 +24,7 @@ import { AIAssistantPage } from '../pages/student/AIAssistantPage';
 import { LecturerDashboard } from '../pages/lecturer/LecturerDashboard';
 import { KRSApprovalPage } from '../pages/lecturer/KRSApprovalPage';
 import { LecturerClassesPage } from '../pages/lecturer/LecturerClassesPage';
+import { LecturerAdviseesPage } from '../pages/lecturer/LecturerAdviseesPage';
 import { LecturerAttendancePage } from '../pages/lecturer/LecturerAttendancePage';
 import { LecturerGradesPage } from '../pages/lecturer/LecturerGradesPage';
 import { LecturerConsultationPage } from '../pages/lecturer/LecturerConsultationPage';
@@ -154,7 +155,7 @@ export const AppRoutes: React.FC = () => {
           path="/lecturer/students"
           element={
             <RoleRouteGuard allowedRole="lecturer">
-              <LecturerClassesPage />
+              <LecturerAdviseesPage />
             </RoleRouteGuard>
           }
         />

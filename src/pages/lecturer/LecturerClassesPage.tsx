@@ -1,16 +1,37 @@
 import React, { useState } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
-import { BookOpen, Users, Calendar, MapPin, Clock, Search } from 'lucide-react';
 
 export const LecturerClassesPage: React.FC = () => {
-  const { activeLecturer, classes, students } = useAcademic();
+  const { activeLecturer, classes, students, studyPlans } = useAcademic();
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
 
   if (!activeLecturer) return null;
 
   const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
-  const currentClass = classes.find((c) => c.id === selectedClassId) || lecturerClasses[0];
+  const currentClass = lecturerClasses.find((c) => c.id === selectedClassId) || lecturerClasses[0];
+  const approvedPlans = studyPlans.filter((plan) => plan.status === 'approved');
+  const getClassRoster = (classId: string) => {
+    const roster = new Map<
+      string,
+      { student: (typeof students)[number]; plan: (typeof approvedPlans)[number] }
+    >();
+
+    approvedPlans.forEach((plan) => {
+      const student = students.find((candidate) => candidate.id === plan.studentId);
+      if (
+        student &&
+        plan.academicYear === student.academicYear &&
+        plan.semester === student.currentSemester &&
+        plan.items.some((item) => item.classId === classId)
+      ) {
+        roster.set(student.id, { student, plan });
+      }
+    });
+
+    return Array.from(roster.values());
+  };
+  const registeredStudents = currentClass ? getClassRoster(currentClass.id) : [];
 
   return (
     <div className="space-y-6">
@@ -50,7 +71,7 @@ export const LecturerClassesPage: React.FC = () => {
                   {cls.day}, {cls.startTime}
                 </span>
                 <span className="font-bold text-blue-600">
-                  {cls.enrolled} / {cls.capacity} Mhs
+                  {getClassRoster(cls.id).length} / {cls.capacity} Mhs
                 </span>
               </p>
             </div>
@@ -71,7 +92,7 @@ export const LecturerClassesPage: React.FC = () => {
               </p>
             </div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 self-start sm:self-auto">
-              {currentClass.enrolled} Mahasiswa Terdaftar
+              {registeredStudents.length} Mahasiswa Terdaftar
             </span>
           </div>
 
@@ -88,7 +109,7 @@ export const LecturerClassesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {students.map((std, idx) => (
+                {registeredStudents.map(({ student: std, plan }, idx) => (
                   <tr key={std.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 text-slate-400">{idx + 1}</td>
                     <td className="py-3 px-4 font-bold text-slate-800">{std.name}</td>
@@ -97,11 +118,18 @@ export const LecturerClassesPage: React.FC = () => {
                     <td className="py-3 px-4 text-center font-medium text-slate-700">Sem {std.currentSemester}</td>
                     <td className="py-3 px-4 text-center">
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        TERDAFTAR RESMI
+                        KRS DISETUJUI ({plan.academicYear})
                       </span>
                     </td>
                   </tr>
                 ))}
+                {registeredStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
+                      Belum ada mahasiswa dengan KRS yang disetujui terdaftar pada kelas ini.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
