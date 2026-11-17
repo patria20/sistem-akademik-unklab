@@ -17,14 +17,23 @@ import {
 } from 'lucide-react';
 
 export const LecturerDashboard: React.FC = () => {
-  const { activeLecturer, studyPlans, classes, attendances, consultations } = useAcademic();
+  const { activeLecturer, students, studyPlans, classes, attendances, consultations } = useAcademic();
 
   if (!activeLecturer) return null;
 
   // Pending KRS
-  const pendingKrsList = studyPlans.filter((p) => p.status === 'submitted');
+  const advisees = students.filter((student) => student.academicAdvisorId === activeLecturer.id);
+  const adviseeIds = new Set(advisees.map((student) => student.id));
+  const pendingKrsList = studyPlans.filter(
+    (plan) => plan.status === 'submitted' && adviseeIds.has(plan.studentId)
+  );
   const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
-  const pendingCorrections = attendances.filter((a) => a.correctionStatus === 'pending');
+  const lecturerClassIds = new Set(lecturerClasses.map((courseClass) => courseClass.id));
+  const pendingCorrections = attendances.filter(
+    (attendance) =>
+      attendance.correctionStatus === 'pending' &&
+      (lecturerClassIds.has(attendance.classId) || adviseeIds.has(attendance.studentId))
+  );
   const waitingConsultations = consultations.filter((c) => c.status === 'waiting');
 
   return (
@@ -57,8 +66,8 @@ export const LecturerDashboard: React.FC = () => {
         />
         <StatCard
           title="Mahasiswa Bimbingan (PA)"
-          value={`${activeLecturer.adviseeCount} Orang`}
-          subtitle="Program Studi Informatika"
+          value={`${advisees.length} Orang`}
+          subtitle="Mahasiswa dengan Dosen PA aktif"
           icon={Users}
           iconColor="text-blue-600"
           iconBg="bg-blue-50"

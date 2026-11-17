@@ -89,7 +89,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [refreshData]);
 
   const activeStudent = students.find((s) => s.userId === user?.id) || students[0];
-  const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
+  const activeLecturer = lecturers.find((l) => l.userId === user?.id);
   const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {

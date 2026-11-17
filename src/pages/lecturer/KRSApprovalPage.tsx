@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const KRSApprovalPage: React.FC = () => {
-  const { studyPlans, students, reviewKrs } = useAcademic();
+  const { activeLecturer, studyPlans, students, reviewKrs } = useAcademic();
   const { success, warning } = useToast();
 
   const [selectedPlan, setSelectedPlan] = useState<StudyPlan | null>(null);
@@ -29,7 +29,14 @@ export const KRSApprovalPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [actionSuccessToast, setActionSuccessToast] = useState<string | null>(null);
 
-  const filteredPlans = studyPlans.filter((p) => {
+  const lecturerStudyPlans = studyPlans.filter((plan) =>
+    students.some(
+      (student) =>
+        student.id === plan.studentId &&
+        student.academicAdvisorId === activeLecturer?.id
+    )
+  );
+  const filteredPlans = lecturerStudyPlans.filter((p) => {
     if (filterStatus === 'all') return true;
     return p.status === filterStatus;
   });
@@ -87,7 +94,7 @@ export const KRSApprovalPage: React.FC = () => {
             filterStatus === 'all' ? 'bg-[#142B4A] text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Semua ({studyPlans.length})
+          Semua ({lecturerStudyPlans.length})
         </button>
         <button
           onClick={() => setFilterStatus('submitted')}
@@ -97,7 +104,7 @@ export const KRSApprovalPage: React.FC = () => {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Menunggu Tinjauan ({studyPlans.filter((p) => p.status === 'submitted').length})
+          Menunggu Tinjauan ({lecturerStudyPlans.filter((p) => p.status === 'submitted').length})
         </button>
         <button
           onClick={() => setFilterStatus('approved')}
@@ -107,7 +114,7 @@ export const KRSApprovalPage: React.FC = () => {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Disetujui ({studyPlans.filter((p) => p.status === 'approved').length})
+          Disetujui ({lecturerStudyPlans.filter((p) => p.status === 'approved').length})
         </button>
         <button
           onClick={() => setFilterStatus('revision')}
@@ -117,7 +124,7 @@ export const KRSApprovalPage: React.FC = () => {
               : 'text-slate-600 hover:bg-slate-100'
           }`}
         >
-          Perlu Revisi ({studyPlans.filter((p) => p.status === 'revision').length})
+          Perlu Revisi ({lecturerStudyPlans.filter((p) => p.status === 'revision').length})
         </button>
       </div>
 
