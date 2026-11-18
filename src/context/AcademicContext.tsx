@@ -60,7 +60,9 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const refreshData = useCallback(() => {
     AcademicService.initialize();
-    setStudents(AcademicService.getStudents());
+
+    const loadedStudents = AcademicService.getStudents();
+    setStudents(loadedStudents);
     setLecturers(AcademicService.getLecturers());
     setCourses(AcademicService.getCourses());
     setClasses(AcademicService.getClasses());
@@ -69,16 +71,23 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setConsultations(AcademicService.getConsultations());
     setNotifications(AcademicService.getNotifications());
     setAuditLogs(AcademicService.getAuditLogs());
-    setGrades(AcademicService.getGradesByStudentId('std_01'));
-  }, []);
+
+    const currentStudent = loadedStudents.find((student) => student.userId === user?.id)
+      || (!user || user.role === 'student' ? loadedStudents[0] : undefined);
+    setGrades(currentStudent ? AcademicService.getGradesByStudentId(currentStudent.id) : []);
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  const activeStudent = students.find((s) => s.userId === user?.id) || students[0];
-  const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
-  const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
+  const activeStudent = students.find((student) => student.userId === user?.id)
+    || (!user || user.role === 'student' ? students[0] : undefined);
+  const activeLecturer = lecturers.find((lecturer) => lecturer.userId === user?.id)
+    || (user?.role === 'lecturer' ? lecturers[0] : undefined);
+  const activeKrs = studyPlans.find(
+    (plan) => plan.studentId === activeStudent?.id && plan.semester === activeStudent?.currentSemester
+  );
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
@@ -111,7 +120,8 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const handleCreateConsultation = (lecturerId: string, topic: string, message: string) => {
     if (!activeStudent) return;
-    const targetLec = lecturers.find((l) => l.id === lecturerId) || lecturers[0];
+    const targetLec = lecturers.find((lecturer) => lecturer.id === lecturerId || lecturer.userId === lecturerId);
+    if (!targetLec) return;
     AcademicService.createConsultation({
       studentId: activeStudent.id,
       studentName: activeStudent.name,

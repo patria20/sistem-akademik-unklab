@@ -2,49 +2,69 @@ import React from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatCard } from '../../components/common/StatCard';
-import { calculateAcademicProgress } from '../../utils/gpaCalculator';
+import { calculateAcademicProgress, PASSING_GRADES } from '../../utils/gpaCalculator';
 import {
   Award,
-  BookOpen,
+  Check,
   CheckCircle2,
   Clock,
   GraduationCap,
-  Sparkles,
   Layers,
-  Check,
 } from 'lucide-react';
+
+const GRADUATION_TARGET = 151;
 
 export const AcademicProgressPage: React.FC = () => {
   const { activeStudent, courses, grades, activeKrs } = useAcademic();
 
   if (!activeStudent) return null;
 
-  const currentEnrolledCredits = activeKrs?.totalCredits || 0;
-  const progress = calculateAcademicProgress(grades, currentEnrolledCredits, 144);
+  // SKS KRS dihitung sebagai sedang ditempuh hanya setelah diajukan/disetujui.
+  const isKrsActive = activeKrs?.status === 'submitted' || activeKrs?.status === 'approved';
+  const passedCourseIds = Array.from(new Set(
+    grades
+      .filter((grade) => grade.isPassed && PASSING_GRADES.includes(grade.letterGrade))
+      .map((grade) => grade.courseId)
+  ));
+  const currentKrsItems = isKrsActive ? activeKrs?.items ?? [] : [];
 
-  const passedCourseIds = grades.filter((g) => g.isPassed).map((g) => g.courseId);
-  const enrolledCourseIds = activeKrs?.items.map((i) => i.courseId) || [];
+  // Hindari menghitung mata kuliah yang sudah lulus sebagai SKS aktif untuk kedua kalinya.
+  const currentItemsByCourse = new Map(
+    currentKrsItems
+      .filter((item) => !passedCourseIds.includes(item.courseId))
+      .map((item) => [item.courseId, item])
+  );
+  const currentEnrolledCredits = Array.from(currentItemsByCourse.values()).reduce(
+    (sum, item) => sum + item.credits,
+    0
+  );
+  const progress = calculateAcademicProgress(grades, currentEnrolledCredits, GRADUATION_TARGET);
+  const enrolledCourseIds = Array.from(currentItemsByCourse.keys());
 
-  // Categorize courses
-  const categories = ['Wajib Prodi', 'Wajib Universitas', 'Tugas Akhir'] as const;
+  const earnedWidth = Math.min(100, (progress.creditsEarned / progress.graduationTarget) * 100);
+  const currentWidth = Math.min(
+    Math.max(0, 100 - earnedWidth),
+    (progress.creditsCurrent / progress.graduationTarget) * 100
+  );
+
+  const categories = ['Wajib Prodi', 'Wajib Universitas', 'Pilihan', 'Tugas Akhir'] as const;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Kemajuan Studi & Evaluasi Kurikulum"
-        subtitle={`Audit kelulusan sarjana berdasarkan Kurikulum MBKM 2024 — ${activeStudent.programStudy}`}
+        subtitle={`Progres pemenuhan kurikulum Informatika — ${activeStudent.programStudy}`}
         breadcrumbs={[
           { label: 'Mahasiswa', path: '/student/dashboard' },
           { label: 'Kemajuan Studi' },
         ]}
       />
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Target Kelulusan"
-          value="144 SKS"
-          subtitle="Standar Sarjana Komputer (S.Kom)"
+          value={`${progress.graduationTarget} SKS`}
+          subtitle="Target kurikulum program studi"
           icon={GraduationCap}
           iconColor="text-indigo-600"
           iconBg="bg-indigo-50"
@@ -52,7 +72,7 @@ export const AcademicProgressPage: React.FC = () => {
         <StatCard
           title="SKS Lulus"
           value={`${progress.creditsEarned} SKS`}
-          subtitle={`${progress.completionPercentage}% kurikulum selesai`}
+          subtitle="SKS dari mata kuliah yang sudah lulus"
           icon={CheckCircle2}
           iconColor="text-emerald-600"
           iconBg="bg-emerald-50"
@@ -60,7 +80,7 @@ export const AcademicProgressPage: React.FC = () => {
         <StatCard
           title="SKS Sedang Ditempuh"
           value={`${progress.creditsCurrent} SKS`}
-          subtitle="Semester 5 Ganjil"
+          subtitle="Berdasarkan KRS yang diajukan/disetujui"
           icon={Clock}
           iconColor="text-blue-600"
           iconBg="bg-blue-50"
@@ -68,61 +88,69 @@ export const AcademicProgressPage: React.FC = () => {
         <StatCard
           title="SKS Tersisa"
           value={`${progress.creditsRemaining} SKS`}
-          subtitle="Estimasi 3 semester menuju wisuda"
+          subtitle="Belum lulus atau sedang ditempuh"
           icon={Layers}
           iconColor="text-amber-600"
           iconBg="bg-amber-50"
         />
+        <StatCard
+          title="IPK Kumulatif"
+          value={progress.cumulativeGpa === null ? '—' : progress.cumulativeGpa.toFixed(2)}
+          subtitle="Dihitung dari seluruh nilai yang tersedia"
+          icon={Award}
+          iconColor="text-violet-600"
+          iconBg="bg-violet-50"
+        />
       </div>
 
-      {/* Overall Progress Bar */}
       <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-3">
         <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-800">
           <span>Progres Pemenuhan Kurikulum Informatika</span>
           <span className="text-blue-600">{progress.completionPercentage}%</span>
         </div>
-        <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden flex">
+        <div
+          className="w-full bg-slate-100 rounded-full h-4 overflow-hidden flex"
+          aria-label={`Progres kurikulum ${progress.completionPercentage}%`}
+        >
           <div
             className="bg-emerald-500 h-4 transition-all duration-500"
-            style={{ width: `${(progress.creditsEarned / 144) * 100}%` }}
+            style={{ width: `${earnedWidth}%` }}
             title={`Lulus: ${progress.creditsEarned} SKS`}
-          ></div>
+          />
           <div
             className="bg-blue-500 h-4 transition-all duration-500"
-            style={{ width: `${(progress.creditsCurrent / 144) * 100}%` }}
-            title={`Sedang Ditempuh: ${progress.creditsCurrent} SKS`}
-          ></div>
+            style={{ width: `${currentWidth}%` }}
+            title={`Sedang ditempuh: ${progress.creditsCurrent} SKS`}
+          />
         </div>
-        <div className="flex items-center gap-6 text-xs text-slate-500 pt-1">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 pt-1">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-sm bg-emerald-500"></span>
+            <span className="w-3 h-3 rounded-sm bg-emerald-500" />
             <span>Lulus ({progress.creditsEarned} SKS)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-sm bg-blue-500"></span>
-            <span>Sedang Ditempuh ({progress.creditsCurrent} SKS)</span>
+            <span className="w-3 h-3 rounded-sm bg-blue-500" />
+            <span>Sedang ditempuh ({progress.creditsCurrent} SKS)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-sm bg-slate-200"></span>
-            <span>Belum Ditempuh ({progress.creditsRemaining} SKS)</span>
+            <span className="w-3 h-3 rounded-sm bg-slate-200" />
+            <span>Belum ditempuh ({progress.creditsRemaining} SKS)</span>
           </div>
         </div>
       </div>
 
-      {/* Curriculum Checklist by Category */}
       <div className="space-y-6">
-        {categories.map((cat) => {
-          const catCourses = courses.filter((c) => c.category === cat);
-          if (catCourses.length === 0) return null;
+        {categories.map((category) => {
+          const categoryCourses = courses.filter((course) => course.category === category);
+          if (categoryCourses.length === 0) return null;
 
           return (
-            <div key={cat} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
+            <div key={category} className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
               <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
                 <div>
-                  <h3 className="text-sm font-bold text-[#142B4A]">{cat}</h3>
+                  <h3 className="text-sm font-bold text-[#142B4A]">{category}</h3>
                   <p className="text-xs text-slate-500">
-                    Total mata kuliah kategori ini: {catCourses.length} Mata Kuliah (
-                    {catCourses.reduce((sum, c) => sum + c.credits, 0)} SKS)
+                    Total mata kuliah: {categoryCourses.length} ({categoryCourses.reduce((sum, course) => sum + course.credits, 0)} SKS)
                   </p>
                 </div>
               </div>
@@ -140,28 +168,26 @@ export const AcademicProgressPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {catCourses.map((c) => {
-                      const isPassed = passedCourseIds.includes(c.id);
-                      const isEnrolled = enrolledCourseIds.includes(c.id);
-                      const grade = grades.find((g) => g.courseId === c.id);
+                    {categoryCourses.map((course) => {
+                      const isPassed = passedCourseIds.includes(course.id);
+                      const isEnrolled = enrolledCourseIds.includes(course.id);
+                      const grade = grades.find((record) => record.courseId === course.id && record.isPassed);
 
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-3 px-3 font-mono font-bold text-slate-700">{c.code}</td>
+                        <tr key={course.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3 px-3 font-mono font-bold text-slate-700">{course.code}</td>
                           <td className="py-3 px-3">
-                            <p className="font-semibold text-slate-800">{c.name}</p>
-                            <p className="text-[10px] text-slate-400 italic">{c.nameEn}</p>
+                            <p className="font-semibold text-slate-800">{course.name}</p>
+                            <p className="text-[10px] text-slate-400 italic">{course.nameEn}</p>
                           </td>
-                          <td className="py-3 px-3 text-center font-semibold">{c.credits}</td>
-                          <td className="py-3 px-3 text-center text-slate-500">{c.semester}</td>
+                          <td className="py-3 px-3 text-center font-semibold">{course.credits}</td>
+                          <td className="py-3 px-3 text-center text-slate-500">{course.semester}</td>
                           <td className="py-3 px-3 text-slate-500 text-[11px]">
-                            {c.prerequisites.length === 0 ? (
-                              <span className="text-slate-400">-</span>
-                            ) : (
-                              c.prerequisites
-                                .map((pid) => courses.find((item) => item.id === pid)?.code || pid)
-                                .join(', ')
-                            )}
+                            {course.prerequisites.length === 0
+                              ? <span className="text-slate-400">-</span>
+                              : course.prerequisites
+                                  .map((id) => courses.find((item) => item.id === id)?.code || id)
+                                  .join(', ')}
                           </td>
                           <td className="py-3 px-3 text-center">
                             {isPassed ? (

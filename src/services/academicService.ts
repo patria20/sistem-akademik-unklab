@@ -126,20 +126,49 @@ export class AcademicService {
 
   // Classes
   static getClasses(): CourseClass[] {
-    return getStoredItem<CourseClass[]>(STORAGE_KEYS.CLASSES, MOCK_CLASSES);
+  const storedClasses = getStoredItem<CourseClass[]>(
+    STORAGE_KEYS.CLASSES,
+    MOCK_CLASSES
+  );
+
+  // Hilangkan kelas dengan ID yang sama
+  const uniqueClasses = Array.from(
+    new Map(storedClasses.map((cls) => [cls.id, cls])).values()
+  );
+
+  // Simpan kembali data yang sudah dibersihkan
+  if (uniqueClasses.length !== storedClasses.length) {
+    setStoredItem(STORAGE_KEYS.CLASSES, uniqueClasses);
   }
 
-  static addClass(cls: CourseClass): void {
-    const list = this.getClasses();
-    list.push(cls);
-    setStoredItem(STORAGE_KEYS.CLASSES, list);
-    this.addAuditLog('Admin Akademik', 'admin', 'ADD_CLASS', `Membuka kelas baru: ${cls.courseCode} Seksi ${cls.section}`);
+  return uniqueClasses;
+}
+
+static addClass(cls: CourseClass): void {
+  const list = this.getClasses();
+
+  const existingClass = list.some((item) => item.id === cls.id);
+
+  if (existingClass) {
+    console.warn(`Kelas dengan ID ${cls.id} sudah tersedia.`);
+    return;
   }
+
+  list.push(cls);
+  setStoredItem(STORAGE_KEYS.CLASSES, list);
+
+  this.addAuditLog(
+    'Admin Akademik',
+    'admin',
+    'ADD_CLASS',
+    `Membuka kelas baru: ${cls.courseCode} Paralel ${cls.section}`
+  );
+}
 
   // Grades
   static getGradesByStudentId(studentId: string): GradeRecord[] {
     const grades = getStoredItem<GradeRecord[]>(STORAGE_KEYS.GRADES, MOCK_GRADES_DAVID);
-    return grades.filter((g) => g.studentId === studentId || studentId === 'std_01');
+    return grades.filter((grade) => grade.studentId === studentId);
   }
 
   // Study Plans (KRS)
@@ -154,13 +183,23 @@ export class AcademicService {
 
   static saveKrsDraft(studentId: string, items: StudyPlanItem[], notes: string): StudyPlan {
     const plans = this.getStudyPlans();
-    const student = this.getStudentById(studentId) || MOCK_STUDENTS[0];
-    const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0);
+    const student = this.getStudentById(studentId);
+    if (!student) throw new Error('Data mahasiswa tidak ditemukan. Draft KRS tidak dapat disimpan.');
 
-    let plan = plans.find((p) => p.studentId === studentId);
+    let plan = plans.find(
+      (existingPlan) => existingPlan.studentId === studentId && existingPlan.semester === student.currentSemester
+    );
+    if (plan?.status === 'approved') {
+      throw new Error('KRS yang sudah disetujui tidak dapat diubah.');
+    }
+
+    const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0);
+    const planId = plan?.id || `krs_${studentId}_sem${student.currentSemester}`;
+    const draftItems = items.map((item) => ({ ...item, studyPlanId: planId, status: 'draft' as const }));
+
     if (!plan) {
       plan = {
-        id: `krs_${studentId}_sem${student.currentSemester}`,
+        id: planId,
         studentId,
         studentNim: student.nim,
         studentName: student.name,
@@ -169,14 +208,15 @@ export class AcademicService {
         status: 'draft',
         totalCredits,
         notes,
-        items,
+        items: draftItems,
       };
       plans.push(plan);
     } else {
       plan.status = 'draft';
       plan.totalCredits = totalCredits;
       plan.notes = notes;
-      plan.items = items;
+      plan.items = draftItems;
+      plan.advisorFeedback = undefined;
     }
 
     setStoredItem(STORAGE_KEYS.STUDY_PLANS, plans);
@@ -188,14 +228,25 @@ export class AcademicService {
 
   static submitKrs(studentId: string, items: StudyPlanItem[], notes: string): StudyPlan {
     const plans = this.getStudyPlans();
-    const student = this.getStudentById(studentId) || MOCK_STUDENTS[0];
+    const student = this.getStudentById(studentId);
+    if (!student) throw new Error('Data mahasiswa tidak ditemukan. KRS tidak dapat diajukan.');
+    if (items.length === 0) throw new Error('Pilih minimal satu kelas sebelum mengajukan KRS.');
+
+    let plan = plans.find(
+      (existingPlan) => existingPlan.studentId === studentId && existingPlan.semester === student.currentSemester
+    );
+    if (plan?.status === 'approved') {
+      throw new Error('KRS yang sudah disetujui tidak dapat diajukan kembali.');
+    }
+
     const totalCredits = items.reduce((sum, item) => sum + (item.credits || 0), 0);
     const submittedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const planId = plan?.id || `krs_${studentId}_sem${student.currentSemester}`;
+    const submittedItems = items.map((item) => ({ ...item, studyPlanId: planId, status: 'submitted' as const }));
 
-    let plan = plans.find((p) => p.studentId === studentId);
     if (!plan) {
       plan = {
-        id: `krs_${studentId}_sem${student.currentSemester}`,
+        id: planId,
         studentId,
         studentNim: student.nim,
         studentName: student.name,
@@ -205,7 +256,7 @@ export class AcademicService {
         totalCredits,
         notes,
         submittedAt,
-        items,
+        items: submittedItems,
       };
       plans.push(plan);
     } else {
@@ -213,22 +264,23 @@ export class AcademicService {
       plan.totalCredits = totalCredits;
       plan.notes = notes;
       plan.submittedAt = submittedAt;
-      plan.items = items;
+      plan.items = submittedItems;
+      plan.advisorFeedback = undefined;
     }
 
     setStoredItem(STORAGE_KEYS.STUDY_PLANS, plans);
     this.updateStudent(studentId, { krsStatus: 'submitted', creditsCurrent: totalCredits });
 
-    // Send notification to advisor
+    const advisor = this.getLecturerById(student.academicAdvisorId);
     this.addNotification({
       id: `notif_${Date.now()}`,
-      userId: 'usr_lecturer_01',
+      userId: advisor?.userId || student.academicAdvisorId,
       title: 'Pengajuan KRS Baru Masuk',
       message: `${student.name} (${student.nim}) telah mengirimkan KRS Semester ${student.currentSemester} (${totalCredits} SKS).`,
       type: 'warning',
       link: '/lecturer/krs-approval',
       read: false,
-      createdAt: 'Baru saja',
+      createdAt: new Date().toISOString(),
     });
 
     this.addAuditLog(student.name, 'student', 'SUBMIT_KRS', `Mengirimkan KRS ke Dosen PA (${totalCredits} SKS)`);
@@ -254,9 +306,10 @@ export class AcademicService {
     this.updateStudent(plan.studentId, { krsStatus: decision });
 
     // Send notification to student
+    const student = this.getStudentById(plan.studentId);
     this.addNotification({
       id: `notif_${Date.now()}`,
-      userId: 'usr_student_01',
+      userId: student?.userId || plan.studentId,
       title: decision === 'approved' ? 'KRS Disetujui Dosen PA' : 'KRS Memerlukan Revisi',
       message: decision === 'approved'
         ? `Selamat, KRS Anda telah disetujui oleh ${reviewerName}. Anda resmi terdaftar pada perkuliahan.`
@@ -278,7 +331,7 @@ export class AcademicService {
   // Attendance
   static getAttendances(studentId?: string): AttendanceRecord[] {
     const list = getStoredItem<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCES, MOCK_ATTENDANCES);
-    return studentId ? list.filter((a) => a.studentId === studentId || studentId === 'std_01') : list;
+    return studentId ? list.filter((attendance) => attendance.studentId === studentId) : list;
   }
 
   static requestAttendanceCorrection(attendanceId: string, reason: string): void {
@@ -329,7 +382,7 @@ export class AcademicService {
   // Consultations
   static getConsultations(userId?: string): ConsultationSession[] {
     const list = getStoredItem<ConsultationSession[]>(STORAGE_KEYS.CONSULTATIONS, MOCK_CONSULTATIONS);
-    return userId ? list.filter((c) => c.studentId === userId || c.lecturerId === userId || true) : list;
+    return userId ? list.filter((consultation) => consultation.studentId === userId || consultation.lecturerId === userId) : list;
   }
 
   static createConsultation(data: Omit<ConsultationSession, 'id' | 'createdAt' | 'updatedAt'>): ConsultationSession {
@@ -344,9 +397,10 @@ export class AcademicService {
     list.unshift(session);
     setStoredItem(STORAGE_KEYS.CONSULTATIONS, list);
 
+    const lecturer = this.getLecturerById(data.lecturerId);
     this.addNotification({
       id: `notif_${Date.now()}`,
-      userId: 'usr_lecturer_01',
+      userId: lecturer?.userId || data.lecturerId,
       title: 'Permintaan Bimbingan Akademik',
       message: `${data.studentName} mengajukan konsultasi mengenai: "${data.topic}".`,
       type: 'info',
@@ -368,9 +422,10 @@ export class AcademicService {
       session.updatedAt = new Date().toISOString().replace('T', ' ').substring(0, 19);
       setStoredItem(STORAGE_KEYS.CONSULTATIONS, list);
 
+      const student = this.getStudentById(session.studentId);
       this.addNotification({
         id: `notif_${Date.now()}`,
-        userId: 'usr_student_01',
+        userId: student?.userId || session.studentId,
         title: 'Balasan Konsultasi Akademik',
         message: `${session.lecturerName} telah membalas konsultasi "${session.topic}".`,
         type: 'success',
@@ -384,7 +439,7 @@ export class AcademicService {
   // Notifications
   static getNotifications(userId?: string): SystemNotification[] {
     const list = getStoredItem<SystemNotification[]>(STORAGE_KEYS.NOTIFICATIONS, MOCK_NOTIFICATIONS);
-    return userId ? list.filter((n) => n.userId === userId || true) : list;
+    return userId ? list.filter((notification) => notification.userId === userId) : list;
   }
 
   static addNotification(notification: SystemNotification): void {

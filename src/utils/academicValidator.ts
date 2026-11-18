@@ -1,136 +1,104 @@
 import type { Course, CourseClass, ValidationResult } from '../types/academic';
+import { calculateCumulativeGpa, calculateMaxCreditLimit } from './gpaCalculator';
 
-/**
- * Calculates total credits for an array of courses or items
- */
+// Re-export agar komponen yang sudah menggunakan import dari academicValidator tetap kompatibel.
+export { calculateCumulativeGpa, calculateMaxCreditLimit };
+
 export function calculateTotalCredits(items: { credits: number }[]): number {
-  return items.reduce((sum, item) => sum + (item.credits || 0), 0);
+  return items.reduce((sum, item) => sum + (Number.isFinite(item.credits) ? item.credits : 0), 0);
 }
 
-/**
- * Validates whether all prerequisites for a given course are satisfied.
- * Uses exact Course IDs matching passed courses.
- */
 export function checkPrerequisite(
   course: Course,
   passedCourseIds: string[],
   allCourses: Course[]
 ): { satisfied: boolean; missing: string[] } {
-  if (!course.prerequisites || course.prerequisites.length === 0) {
-    return { satisfied: true, missing: [] };
-  }
-
-  const missingIds = course.prerequisites.filter((reqId) => !passedCourseIds.includes(reqId));
-  const missingNames = missingIds.map((id) => {
-    const c = allCourses.find((item) => item.id === id);
-    return c ? `${c.code} - ${c.name}` : id;
+  const prerequisites = course.prerequisites ?? [];
+  const missingIds = prerequisites.filter((requiredId) => !passedCourseIds.includes(requiredId));
+  const missing = missingIds.map((id) => {
+    const requiredCourse = allCourses.find((item) => item.id === id);
+    return requiredCourse ? `${requiredCourse.code} - ${requiredCourse.name}` : id;
   });
 
-  return {
-    satisfied: missingIds.length === 0,
-    missing: missingNames,
-  };
+  return { satisfied: missing.length === 0, missing };
 }
 
-/**
- * Converts "HH:mm" time string into minutes from midnight for collision calculation
- */
-function timeToMinutes(timeStr: string): number {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return (hours || 0) * 60 + (minutes || 0);
+function timeToMinutes(time: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
 }
 
-/**
- * Checks if two schedule time slots on the same day overlap
- */
-function isOverlapping(
-  startA: string,
-  endA: string,
-  startB: string,
-  endB: string
-): boolean {
+function isOverlapping(startA: string, endA: string, startB: string, endB: string): boolean {
   const aStart = timeToMinutes(startA);
   const aEnd = timeToMinutes(endA);
   const bStart = timeToMinutes(startB);
   const bEnd = timeToMinutes(endB);
 
+  if (aStart === null || aEnd === null || bStart === null || bEnd === null) return false;
+  if (aStart >= aEnd || bStart >= bEnd) return false;
+
   return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
 }
 
-/**
- * Deterministically checks for schedule collisions between classes on the same day.
- */
 export function validateScheduleConflict(classes: CourseClass[]): {
   hasConflict: boolean;
   conflicts: { course1: string; course2: string; time: string }[];
 } {
   const conflicts: { course1: string; course2: string; time: string }[] = [];
 
-  for (let i = 0; i < classes.length; i++) {
-    for (let j = i + 1; j < classes.length; j++) {
-      const cls1 = classes[i];
-      const cls2 = classes[j];
+  for (let i = 0; i < classes.length; i += 1) {
+    for (let j = i + 1; j < classes.length; j += 1) {
+      const first = classes[i];
+      const second = classes[j];
 
-      if (cls1.day === cls2.day) {
-        if (isOverlapping(cls1.startTime, cls1.endTime, cls2.startTime, cls2.endTime)) {
-          conflicts.push({
-            course1: `${cls1.courseCode} (${cls1.section})`,
-            course2: `${cls2.courseCode} (${cls2.section})`,
-            time: `${cls1.day}, ${cls1.startTime}-${cls1.endTime} vs ${cls2.startTime}-${cls2.endTime}`,
-          });
-        }
+      if (first.day === second.day && isOverlapping(
+        first.startTime,
+        first.endTime,
+        second.startTime,
+        second.endTime
+      )) {
+        conflicts.push({
+          course1: `${first.courseCode} (${first.section})`,
+          course2: `${second.courseCode} (${second.section})`,
+          time: `${first.day}, ${first.startTime}-${first.endTime} vs ${second.startTime}-${second.endTime}`,
+        });
       }
     }
   }
 
-  return {
-    hasConflict: conflicts.length > 0,
-    conflicts,
-  };
+  return { hasConflict: conflicts.length > 0, conflicts };
 }
 
-/**
- * Validates if total selected credits exceed the student's authorized credit ceiling.
- */
 export function validateCreditLimit(
   totalCredits: number,
   maxCreditLimit: number
 ): { valid: boolean; current: number; max: number; excess: number } {
+  const max = Math.max(0, maxCreditLimit);
   return {
-    valid: totalCredits <= maxCreditLimit,
+    valid: totalCredits <= max,
     current: totalCredits,
-    max: maxCreditLimit,
-    excess: Math.max(0, totalCredits - maxCreditLimit),
+    max,
+    excess: Math.max(0, totalCredits - max),
   };
 }
 
-/**
- * Validates class capacity
- */
 export function validateClassCapacity(courseClass: CourseClass): {
   isFull: boolean;
   remainingSeats: number;
 } {
-  const remaining = courseClass.capacity - courseClass.enrolled;
-  return {
-    isFull: remaining <= 0,
-    remainingSeats: Math.max(0, remaining),
-  };
+  const remainingSeats = Math.max(0, courseClass.capacity - courseClass.enrolled);
+  return { isFull: remainingSeats === 0, remainingSeats };
 }
 
-/**
- * Checks if a course is a repetition
- */
-export function checkRepeatedCourse(
-  courseId: string,
-  passedCourseIds: string[]
-): boolean {
+export function checkRepeatedCourse(courseId: string, passedCourseIds: string[]): boolean {
   return passedCourseIds.includes(courseId);
 }
 
-/**
- * Master Validation Engine evaluating an entire study plan
- */
 export function validateStudyPlan(
   selectedClasses: CourseClass[],
   allCourses: Course[],
@@ -139,8 +107,7 @@ export function validateStudyPlan(
 ): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
-
-  // 1. Credit Limit
+  const prerequisiteIssues: ValidationResult['prerequisiteIssues'] = [];
   const totalCredits = calculateTotalCredits(selectedClasses);
   const creditCheck = validateCreditLimit(totalCredits, maxCreditLimit);
   let creditIssue: ValidationResult['creditIssue'];
@@ -156,55 +123,57 @@ export function validateStudyPlan(
     };
   }
 
-  // 2. Schedule Conflicts
+  const selectedCourseIds = new Set<string>();
+  selectedClasses.forEach((selectedClass) => {
+    if (selectedCourseIds.has(selectedClass.courseId)) {
+      errors.push(`Mata kuliah ${selectedClass.courseCode} dipilih lebih dari satu kali. Pilih hanya satu Paralel.`);
+    }
+    selectedCourseIds.add(selectedClass.courseId);
+
+    const course = allCourses.find((item) => item.id === selectedClass.courseId);
+    if (!course) {
+      errors.push(`Data mata kuliah ${selectedClass.courseCode} tidak ditemukan dalam katalog.`);
+      return;
+    }
+
+    const prerequisiteCheck = checkPrerequisite(course, passedCourseIds, allCourses);
+    if (!prerequisiteCheck.satisfied) {
+      errors.push(
+        `Prasyarat belum terpenuhi untuk ${course.code} (${course.name}). Prasyarat yang dibutuhkan: ${prerequisiteCheck.missing.join(', ')}.`
+      );
+      prerequisiteIssues.push({
+        course: `${course.code} - ${course.name}`,
+        missingPrerequisites: prerequisiteCheck.missing,
+      });
+    }
+
+    if (checkRepeatedCourse(selectedClass.courseId, passedCourseIds)) {
+      errors.push(`Mata kuliah ${selectedClass.courseCode} (${selectedClass.courseName}) sudah pernah Anda lulusi dan tidak dapat diambil kembali.`);
+    }
+  });
+
+  selectedClasses.forEach((selectedClass) => {
+    const capacityCheck = validateClassCapacity(selectedClass);
+    if (capacityCheck.isFull) {
+      errors.push(
+        `Kelas ${selectedClass.courseCode} Paralel ${selectedClass.section} sudah penuh (${selectedClass.enrolled}/${selectedClass.capacity} mahasiswa).`
+      );
+    } else if (capacityCheck.remainingSeats <= 3) {
+      warnings.push(
+        `Kelas ${selectedClass.courseCode} Paralel ${selectedClass.section} hampir penuh (sisa ${capacityCheck.remainingSeats} kursi).`
+      );
+    }
+
+    const start = timeToMinutes(selectedClass.startTime);
+    const end = timeToMinutes(selectedClass.endTime);
+    if (start === null || end === null || start >= end) {
+      errors.push(`Jadwal kelas ${selectedClass.courseCode} Paralel ${selectedClass.section} tidak valid.`);
+    }
+  });
+
   const conflictCheck = validateScheduleConflict(selectedClasses);
-  if (conflictCheck.hasConflict) {
-    conflictCheck.conflicts.forEach((c) => {
-      errors.push(
-        `Jadwal bentrok pada ${c.time} antara ${c.course1} dan ${c.course2}.`
-      );
-    });
-  }
-
-  // 3. Prerequisites
-  const prerequisiteIssues: ValidationResult['prerequisiteIssues'] = [];
-  selectedClasses.forEach((cls) => {
-    const courseObj = allCourses.find((c) => c.id === cls.courseId);
-    if (courseObj) {
-      const prereqCheck = checkPrerequisite(courseObj, passedCourseIds, allCourses);
-      if (!prereqCheck.satisfied) {
-        errors.push(
-          `Prasyarat belum terpenuhi untuk ${courseObj.code} (${courseObj.name}). Prasyarat yang dibutuhkan: ${prereqCheck.missing.join(', ')}.`
-        );
-        prerequisiteIssues.push({
-          course: `${courseObj.code} - ${courseObj.name}`,
-          missingPrerequisites: prereqCheck.missing,
-        });
-      }
-    }
-  });
-
-  // 4. Class Capacity
-  selectedClasses.forEach((cls) => {
-    const capCheck = validateClassCapacity(cls);
-    if (capCheck.isFull) {
-      errors.push(
-        `Kelas ${cls.courseCode} Seksi ${cls.section} sudah PENUH (${cls.enrolled}/${cls.capacity} mahasiswa).`
-      );
-    } else if (capCheck.remainingSeats <= 3) {
-      warnings.push(
-        `Kelas ${cls.courseCode} Seksi ${cls.section} hampir penuh (sisa ${capCheck.remainingSeats} kursi).`
-      );
-    }
-  });
-
-  // 5. Repeated course warning
-  selectedClasses.forEach((cls) => {
-    if (checkRepeatedCourse(cls.courseId, passedCourseIds)) {
-      warnings.push(
-        `Mata kuliah ${cls.courseCode} (${cls.courseName}) sudah pernah Anda lulusi sebelumnya. Mengambil kembali akan dihitung sebagai perbaikan nilai.`
-      );
-    }
+  conflictCheck.conflicts.forEach((conflict) => {
+    errors.push(`Jadwal bentrok pada ${conflict.time} antara ${conflict.course1} dan ${conflict.course2}.`);
   });
 
   return {

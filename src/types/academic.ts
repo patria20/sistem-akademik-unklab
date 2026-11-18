@@ -20,15 +20,17 @@ export interface StudentProfile {
   name: string;
   programStudy: string;
   faculty: string;
-  academicAdvisorId: string; // Dosen PA
+  academicAdvisorId: string;
   academicAdvisorName: string;
   currentSemester: number;
-  cumulativeGpa: number; // IPK
-  lastSemesterGpa: number; // IPS
-  creditsEarned: number; // SKS Lulus
-  creditsCurrent: number; // SKS Ditempuh
-  creditsRemaining: number; // SKS Tersisa (dari total 144)
-  maxCreditLimit: number; // Batas SKS berdasar IPS
+  cumulativeGpa: number;
+  lastSemesterGpa: number;
+  majorGpa: number;
+  isFinalYearCandidate: boolean;
+  creditsEarned: number;
+  creditsCurrent: number;
+  creditsRemaining: number;
+  maxCreditLimit: number;
   krsStatus: 'draft' | 'submitted' | 'approved' | 'revision';
   academicYear: string;
 }

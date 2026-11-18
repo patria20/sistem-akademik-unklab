@@ -12,78 +12,100 @@ export const GRADE_POINTS_SCALE: Record<string, number> = {
   F: 0.0,
 };
 
-export const PASSING_GRADES = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C'];
+// Nilai yang dihitung lulus untuk pemenuhan SKS kelulusan.
+export const PASSING_GRADES: string[] = ['A', 'A-', 'B+', 'B', 'B-', 'C+', 'C'];
 
-/**
- * Calculates Quality Points (Bobot Nilai * SKS)
- */
+export const DEFAULT_GRADUATION_TARGET = 151;
+
+/** Menghitung bobot nilai (grade point) dikalikan SKS. */
 export function calculateQualityPoints(letterGrade: string, credits: number): number {
-  if (letterGrade === 'IP' || !(letterGrade in GRADE_POINTS_SCALE)) {
-    return 0;
-  }
-  return GRADE_POINTS_SCALE[letterGrade] * credits;
+  const gradePoint = GRADE_POINTS_SCALE[letterGrade];
+  if (gradePoint === undefined || !Number.isFinite(credits) || credits <= 0) return 0;
+  return gradePoint * credits;
 }
 
-/**
- * Calculates Semester GPA (IPS)
- */
+/** Menghitung IPS dari kumpulan nilai satu semester. */
 export function calculateSemesterGPA(records: GradeRecord[]): number {
-  const completedRecords = records.filter(
-    (r) => r.letterGrade !== 'IP' && r.letterGrade in GRADE_POINTS_SCALE
+  const gradedRecords = records.filter(
+    (record) => record.letterGrade !== 'IP' && record.letterGrade in GRADE_POINTS_SCALE && record.credits > 0
   );
 
-  if (completedRecords.length === 0) return 0.0;
+  const totalCredits = gradedRecords.reduce((sum, record) => sum + record.credits, 0);
+  if (totalCredits === 0) return 0;
 
-  const totalQualityPoints = completedRecords.reduce(
-    (sum, r) => sum + calculateQualityPoints(r.letterGrade, r.credits),
+  const totalQualityPoints = gradedRecords.reduce(
+    (sum, record) => sum + calculateQualityPoints(record.letterGrade, record.credits),
     0
   );
 
-  const totalCredits = completedRecords.reduce((sum, r) => sum + r.credits, 0);
-
-  return totalCredits > 0 ? Number((totalQualityPoints / totalCredits).toFixed(2)) : 0.0;
+  return Number((totalQualityPoints / totalCredits).toFixed(2));
 }
 
-/**
- * Calculates Cumulative GPA (IPK)
- */
-export function calculateCumulativeGPA(allRecords: GradeRecord[]): number {
-  return calculateSemesterGPA(allRecords);
-}
-
-/**
- * Computes authorized SKS limit based on IPS
- */
-export function calculateMaxCreditLimit(lastSemesterGpa: number): number {
-  if (lastSemesterGpa >= 3.0) return 24;
-  if (lastSemesterGpa >= 2.5) return 21;
-  if (lastSemesterGpa >= 2.0) return 18;
-  return 15;
-}
-
-/**
- * Calculates academic progress summary
- * Total graduation requirement: 144 SKS
- */
-export function calculateAcademicProgress(
-  allRecords: GradeRecord[],
-  currentEnrolledCredits: number = 0,
-  graduationTarget: number = 144
-) {
-  const passedRecords = allRecords.filter(
-    (r) => PASSING_GRADES.includes(r.letterGrade)
+/** Menghitung IPK dari seluruh nilai yang sudah memiliki huruf mutu. */
+export function calculateCumulativeGPA(records: GradeRecord[]): number | null {
+  const gradedRecords = records.filter(
+    (record) => record.letterGrade !== 'IP' && record.letterGrade in GRADE_POINTS_SCALE && record.credits > 0
   );
 
-  const creditsEarned = passedRecords.reduce((sum, r) => sum + r.credits, 0);
-  const creditsRemaining = Math.max(0, graduationTarget - creditsEarned - currentEnrolledCredits);
-  const completionPercentage = Number(((creditsEarned / graduationTarget) * 100).toFixed(1));
+  const totalCredits = gradedRecords.reduce((sum, record) => sum + record.credits, 0);
+  if (totalCredits === 0) return null;
+
+  const totalQualityPoints = gradedRecords.reduce(
+    (sum, record) => sum + calculateQualityPoints(record.letterGrade, record.credits),
+    0
+  );
+
+  return Number((totalQualityPoints / totalCredits).toFixed(2));
+}
+
+// Alias dengan penamaan camelCase agar kompatibel dengan academicValidator.
+export const calculateCumulativeGpa = calculateCumulativeGPA;
+
+/**
+ * Aturan proyek: IPK >= 3,35 mendapat batas 23 SKS.
+ * IPK di bawah 3,35 atau belum tersedia mendapat batas 20 SKS.
+ */
+export function calculateMaxCreditLimit(cumulativeGpa: number | null): number {
+  return cumulativeGpa !== null && cumulativeGpa >= 3.35 ? 23 : 20;
+}
+
+/** Menghitung ringkasan progres kurikulum tanpa menghitung SKS ganda. */
+export function calculateAcademicProgress(
+  allRecords: GradeRecord[],
+  currentEnrolledCredits = 0,
+  graduationTarget = DEFAULT_GRADUATION_TARGET
+) {
+  const target = graduationTarget > 0 ? graduationTarget : DEFAULT_GRADUATION_TARGET;
+  const passedByCourse = new Map<string, GradeRecord>();
+
+  allRecords.forEach((record) => {
+    if (
+      record.isPassed &&
+      PASSING_GRADES.includes(record.letterGrade) &&
+      record.credits > 0 &&
+      !passedByCourse.has(record.courseId)
+    ) {
+      passedByCourse.set(record.courseId, record);
+    }
+  });
+
+  const creditsEarned = Array.from(passedByCourse.values()).reduce(
+    (sum, record) => sum + record.credits,
+    0
+  );
+  const creditsCurrent = Math.max(0, Number.isFinite(currentEnrolledCredits) ? currentEnrolledCredits : 0);
+  const creditsRemaining = Math.max(0, target - creditsEarned - creditsCurrent);
+  const completionPercentage = Math.min(
+    100,
+    Number((((creditsEarned + creditsCurrent) / target) * 100).toFixed(1))
+  );
 
   return {
-    graduationTarget,
+    graduationTarget: target,
     creditsEarned,
-    creditsCurrent: currentEnrolledCredits,
+    creditsCurrent,
     creditsRemaining,
-    completionPercentage: Math.min(100, completionPercentage),
+    completionPercentage,
     cumulativeGpa: calculateCumulativeGPA(allRecords),
   };
 }

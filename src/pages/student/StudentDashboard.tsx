@@ -4,6 +4,7 @@ import { PageHeader } from '../../components/common/PageHeader';
 import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Link } from 'react-router';
+import { calculateMaxCreditLimit } from '../../utils/gpaCalculator';
 import {
   GraduationCap,
   BookOpen,
@@ -32,6 +33,9 @@ export const StudentDashboard: React.FC = () => {
   const { activeStudent, activeKrs, classes } = useAcademic();
 
   if (!activeStudent) return null;
+  const maxCreditLimit = calculateMaxCreditLimit(
+  activeStudent.cumulativeGpa
+);
 
   // Historical GPA Data for Recharts
   const gpaHistoryData = [
@@ -47,7 +51,7 @@ export const StudentDashboard: React.FC = () => {
   const studentSchedule = classes.filter((c) => enrolledClassIds.includes(c.id));
 
   // Academic completion percentage
-  const targetSks = 144;
+  const targetSks = 151;
   const earnedSks = activeStudent.creditsEarned;
   const currentSks = activeKrs?.totalCredits || 0;
   const progressPercent = Math.min(100, Math.round(((earnedSks + currentSks) / targetSks) * 100));
@@ -116,7 +120,7 @@ export const StudentDashboard: React.FC = () => {
           icon={TrendingUp}
           iconColor="text-blue-600"
           iconBg="bg-blue-50"
-          badge="Batas 24 SKS"
+          badge={`Batas ${maxCreditLimit} SKS`}
           badgeColor="bg-blue-100 text-blue-700"
         />
         <StatCard
@@ -140,7 +144,7 @@ export const StudentDashboard: React.FC = () => {
         <StatCard
           title="SKS Ditempuh (Sem 5)"
           value={`${currentSks} SKS`}
-          subtitle={`Maksimal diizinkan: ${activeStudent.maxCreditLimit} SKS`}
+          subtitle={`Maksimal diizinkan: ${maxCreditLimit} SKS`}
           icon={BookOpen}
           iconColor="text-purple-600"
           iconBg="bg-purple-50"
@@ -206,7 +210,9 @@ export const StudentDashboard: React.FC = () => {
           {/* Progress Card */}
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
             <h2 className="text-sm font-bold text-[#142B4A] mb-1">Capaian Kurikulum</h2>
-            <p className="text-xs text-slate-500 mb-4">Progres pemenuhan 144 SKS kelulusan sarjana</p>
+            <p className="text-xs text-slate-500 mb-4">
+              Progres pemenuhan {targetSks} SKS Kelulusan sarjana
+            </p>
 
             <div className="space-y-2">
               <div className="flex justify-between text-xs font-semibold">
@@ -307,7 +313,7 @@ export const StudentDashboard: React.FC = () => {
                     <td className="py-3 px-3">
                       <p className="font-bold text-slate-800">{cls.courseName}</p>
                       <p className="text-[11px] text-slate-500 font-mono">
-                        {cls.courseCode} — Seksi {cls.section}
+                        {cls.courseCode} — Paralel {cls.section}
                       </p>
                     </td>
                     <td className="py-3 px-3 text-center font-semibold text-slate-700">
