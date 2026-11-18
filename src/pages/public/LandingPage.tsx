@@ -25,13 +25,11 @@ import {
 export const LandingPage: React.FC = () => {
   const { isAuthenticated, user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'student' | 'lecturer' | 'admin'>('student');
+  const [activeTab, setActiveTab] = useState<'student' | 'lecturer'>('student');
 
   const getDashboardPath = () => {
     if (!user) return '/login';
-    if (user.role === 'student') return '/student/dashboard';
-    if (user.role === 'lecturer') return '/lecturer/dashboard';
-    return '/admin/dashboard';
+    return user.role === 'student' ? '/student/dashboard' : '/lecturer/dashboard';
   };
 
   return (
@@ -236,7 +234,7 @@ export const LandingPage: React.FC = () => {
             {/* Quick Demo Credentials Reminder */}
             <div className="mt-6 inline-flex items-center gap-2 text-xs text-slate-500 bg-white/80 backdrop-blur-xs py-2 px-4 rounded-xl border border-slate-200 shadow-2xs">
               <span className="font-bold text-slate-700">Mode Uji Coba:</span>
-              <span>Tersedia akun demo instan untuk Mahasiswa, Dosen PA, dan Admin (1-Klik di Login)</span>
+              <span>Login dengan email UNKLAB untuk Mahasiswa (@student.unklab.ac.id) & Dosen (@unklab.ac.id)</span>
             </div>
           </div>
 
@@ -271,16 +269,6 @@ export const LandingPage: React.FC = () => {
                   }`}
                 >
                   Portal Dosen PA
-                </button>
-                <button
-                  onClick={() => setActiveTab('admin')}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    activeTab === 'admin'
-                      ? 'bg-white text-purple-700 shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  Portal Admin Prodi
                 </button>
               </div>
             </div>
@@ -354,41 +342,6 @@ export const LandingPage: React.FC = () => {
                     <p className="text-3xl font-black text-amber-700 mt-2">94.8%</p>
                     <p className="text-[11px] text-amber-600 font-semibold mt-1">
                       Rata-rata kehadiran mahasiswa di kelas
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'admin' && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-900">Course Demand Analyzer</span>
-                      <BarChart3 className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <p className="text-3xl font-black text-purple-700 mt-2">98.4%</p>
-                    <p className="text-[11px] text-purple-600 font-semibold mt-1">
-                      Akurasi proyeksi kelas formula CEIL
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-blue-900">Mata Kuliah & Prasyarat</span>
-                      <Compass className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <p className="text-3xl font-black text-blue-700 mt-2">68 MK</p>
-                    <p className="text-[11px] text-blue-600 font-semibold mt-1">
-                      Kurikulum Informatika & Sistem Informasi
-                    </p>
-                  </div>
-                  <div className="p-4 rounded-2xl bg-slate-100 border border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800">Audit Keamanan & Log</span>
-                      <Shield className="w-5 h-5 text-slate-600" />
-                    </div>
-                    <p className="text-3xl font-black text-slate-800 mt-2">100%</p>
-                    <p className="text-[11px] text-slate-600 font-semibold mt-1">
-                      Seluruh transaksi akademik terekam rapi
                     </p>
                   </div>
                 </div>
@@ -572,10 +525,10 @@ export const LandingPage: React.FC = () => {
               <div className="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-4">
                 <BarChart3 className="w-6 h-6" />
               </div>
-              <h3 className="text-base font-bold text-[#142B4A]">Course Demand Analyzer</h3>
+              <h3 className="text-base font-bold text-[#142B4A]">Analisis Kelas & Perkuliahan</h3>
               <p className="mt-2 text-xs text-slate-600 leading-relaxed">
-                Alat bantu cerdas bagi admin prodi untuk memproyeksikan kebutuhan pembukaan kelas
-                semester baru berdasarkan formula resmi PRD: CEIL(Permintaan / Kapasitas).
+                Alat bantu cerdas bagi dosen untuk memantau statistik kelas, distribusi nilai, dan
+                progres kehadiran mahasiswa secara real-time.
               </p>
             </div>
 
@@ -606,7 +559,7 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* 3 User Roles / Ecosystem Section */}
+      {/* 2 User Roles / Ecosystem Section */}
       <section id="ekosistem" className="py-20 bg-white border-t border-slate-200/80">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center max-w-2xl mx-auto">
@@ -614,14 +567,14 @@ export const LandingPage: React.FC = () => {
               Satu Ekosistem Akademik
             </span>
             <h2 className="text-3xl font-black text-[#142B4A] mt-3">
-              Dirancang untuk 3 Peran Akademik
+              Dirancang untuk 2 Peran Akademik
             </h2>
             <p className="mt-2 text-sm text-slate-600">
               Setiap peran memiliki dashboard spesifik, navigasi terisolasi, dan wewenang yang jelas.
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {/* Student Card */}
             <div className="p-8 rounded-3xl bg-blue-50/50 border border-blue-200/70 hover:shadow-lg transition-all flex flex-col justify-between">
               <div>
@@ -698,46 +651,6 @@ export const LandingPage: React.FC = () => {
                   className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold text-center block transition-colors"
                 >
                   Akses Sebagai Dosen
-                </Link>
-              </div>
-            </div>
-
-            {/* Admin Card */}
-            <div className="p-8 rounded-3xl bg-purple-50/50 border border-purple-200/70 hover:shadow-lg transition-all flex flex-col justify-between">
-              <div>
-                <div className="w-14 h-14 rounded-2xl bg-purple-600 text-white flex items-center justify-center font-bold mb-6 shadow-md">
-                  <Shield className="w-7 h-7" />
-                </div>
-                <h3 className="text-xl font-bold text-[#142B4A]">Admin Program Studi</h3>
-                <p className="text-xs font-semibold text-purple-600 mt-1 uppercase tracking-wide">
-                  Academic Leadership
-                </p>
-                <ul className="mt-6 space-y-3 text-xs text-slate-600">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-                    <span>Master data mahasiswa, dosen & kurikulum MK</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-                    <span>Course Demand Analyzer proyeksi kebutuhan kelas</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-                    <span>Pengelolaan jadwal perkuliahan & alokasi ruang</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-purple-600 shrink-0" />
-                    <span>Log audit transaksi keamanan seluruh sistem</span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-purple-200/60">
-                <Link
-                  to="/login"
-                  className="w-full py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold text-center block transition-colors"
-                >
-                  Akses Sebagai Admin
                 </Link>
               </div>
             </div>

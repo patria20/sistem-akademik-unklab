@@ -18,11 +18,11 @@ export const MOCK_USERS: User[] = [
     id: 'usr_student_01',
     username: 'mahasiswa',
     name: 'David Wowor',
-    email: 'mahasiswa@unklab.ac.id',
+    email: '12410168@student.unklab.ac.id',
     role: 'student',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
     phone: '081244556677',
-    identityNumber: '105022110001',
+    identityNumber: '12410168',
   },
   {
     id: 'usr_lecturer_01',
@@ -33,16 +33,6 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
     phone: '081122334455',
     identityNumber: '0912038401',
-  },
-  {
-    id: 'usr_admin_01',
-    username: 'admin',
-    name: 'Semuel Mewengkang, S.Kom.',
-    email: 'admin@unklab.ac.id',
-    role: 'admin',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80',
-    phone: '081399887766',
-    identityNumber: '198005122005011002',
   },
 ];
 
@@ -917,16 +907,6 @@ export const MOCK_NOTIFICATIONS: SystemNotification[] = [
     read: false,
     createdAt: '2 jam yang lalu',
   },
-  {
-    id: 'notif_05',
-    userId: 'usr_admin_01',
-    title: 'Kapasitas Kelas Terlampaui',
-    message: 'Peringatan: Kelas Pengembangan Aplikasi Mobile Seksi A telah mencapai kapasitas 100%. Diperlukan pembukaan Seksi C.',
-    type: 'danger',
-    link: '/admin/reports',
-    read: false,
-    createdAt: '3 jam yang lalu',
-  },
 ];
 
 // Audit Logs
@@ -957,14 +937,5 @@ export const MOCK_AUDIT_LOGS: AuditLog[] = [
     action: 'REVISE_KRS',
     details: 'Meminta revisi KRS Mahasiswa Kevin Runtu karena melampaui batas SKS.',
     ipAddress: '192.168.1.12 (Ruang Dosen Fasilkom)',
-  },
-  {
-    id: 'log_04',
-    timestamp: '2026-11-07 16:00:00',
-    userName: 'Semuel Mewengkang, S.Kom.',
-    userRole: 'admin',
-    action: 'UPDATE_CAPACITY',
-    details: 'Menambahkan kuota kelas IF401 Seksi A dari 30 menjadi 35 kursi.',
-    ipAddress: '192.168.1.5 (Biro Akademik UNKLAB)',
   },
 ];

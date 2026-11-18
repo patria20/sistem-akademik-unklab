@@ -4,14 +4,13 @@ import { useAuth } from '../../context/AuthContext';
 import { ShieldAlert, ArrowLeft, Home } from 'lucide-react';
 
 export const UnauthorizedPage: React.FC = () => {
-  const { role } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
-  const homePath =
-    role === 'student'
+  const homePath = !isAuthenticated || !user
+    ? '/login'
+    : user.role === 'student'
       ? '/student/dashboard'
-      : role === 'lecturer'
-      ? '/lecturer/dashboard'
-      : '/admin/dashboard';
+      : '/lecturer/dashboard';
 
   return (
     <div className="min-h-screen bg-[#F5F7FB] flex items-center justify-center p-6 text-center">
@@ -22,7 +21,7 @@ export const UnauthorizedPage: React.FC = () => {
         <h1 className="text-xl font-bold text-slate-900">403 — Akses Ditolak</h1>
         <p className="text-xs text-slate-500 leading-relaxed">
           Anda tidak memiliki izin untuk mengakses halaman atau fitur ini. Setiap modul dalam SIAM-UNKLAB
-          dibatasi berdasarkan hak akses peran (Mahasiswa, Dosen, atau Administrator).
+          dibatasi berdasarkan hak akses peran (Mahasiswa atau Dosen).
         </p>
         <div className="pt-2 flex items-center justify-center gap-3">
           <Link

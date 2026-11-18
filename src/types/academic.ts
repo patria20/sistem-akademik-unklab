@@ -1,6 +1,6 @@
 export const ACADEMIC_MODULE_NAME = 'SIAM_UNKLAB_ACADEMIC_SYSTEM';
 
-export type UserRole = 'student' | 'lecturer' | 'admin';
+export type UserRole = 'student' | 'lecturer';
 
 export interface User {
   id: string;
@@ -10,7 +10,7 @@ export interface User {
   role: UserRole;
   avatar: string;
   phone?: string;
-  identityNumber: string; // NIM for student, NIDN for lecturer, NIP for admin
+  identityNumber: string; // NIM for student, NIDN for lecturer
 }
 
 export interface StudentProfile {
