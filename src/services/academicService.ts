@@ -129,7 +129,7 @@ export class AcademicService {
     const list = this.getCourses();
     list.push(course);
     setStoredItem(STORAGE_KEYS.COURSES, list);
-    this.addAuditLog('Admin Akademik', 'admin', 'ADD_COURSE', `Menambahkan mata kuliah baru: ${course.code} - ${course.name}`);
+    this.addAuditLog('Dosen PA', 'lecturer', 'ADD_COURSE', `Menambahkan mata kuliah baru: ${course.code} - ${course.name}`);
   }
 
   // Classes
@@ -141,7 +141,7 @@ export class AcademicService {
     const list = this.getClasses();
     list.push(cls);
     setStoredItem(STORAGE_KEYS.CLASSES, list);
-    this.addAuditLog('Admin Akademik', 'admin', 'ADD_CLASS', `Membuka kelas baru: ${cls.courseCode} Seksi ${cls.section}`);
+    this.addAuditLog('Dosen PA', 'lecturer', 'ADD_CLASS', `Membuka kelas baru: ${cls.courseCode} Seksi ${cls.section}`);
   }
 
   // Grades & Transcripts

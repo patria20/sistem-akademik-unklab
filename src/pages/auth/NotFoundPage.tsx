@@ -4,14 +4,13 @@ import { FileQuestion, Home } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const NotFoundPage: React.FC = () => {
-  const { role } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
-  const homePath =
-    role === 'student'
+  const homePath = !isAuthenticated || !user
+    ? '/'
+    : user.role === 'student'
       ? '/student/dashboard'
-      : role === 'lecturer'
-      ? '/lecturer/dashboard'
-      : '/admin/dashboard';
+      : '/lecturer/dashboard';
 
   return (
     <div className="min-h-screen bg-[#F5F7FB] flex items-center justify-center p-6 text-center">

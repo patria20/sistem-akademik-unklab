@@ -14,14 +14,8 @@ import {
   Users,
   FileCheck,
   ClipboardList,
-  GraduationCap,
-  Building2,
-  GitBranch,
   BarChart3,
-  History,
   X,
-  Sparkles,
-  Info,
   LogOut,
   ExternalLink,
   AlertTriangle,
@@ -94,27 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { name: 'Analisis Kelas', path: '/lecturer/class-analysis', icon: BarChart3 },
   ];
 
-  const adminNav = [
-    { name: 'Dashboard Admin', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Data Mahasiswa', path: '/admin/students', icon: Users },
-    { name: 'Data Dosen', path: '/admin/lecturers', icon: GraduationCap },
-    { name: 'Program Studi', path: '/admin/programs', icon: Building2 },
-    { name: 'Kurikulum MBKM', path: '/admin/curriculums', icon: GitBranch },
-    { name: 'Katalog Mata Kuliah', path: '/admin/courses', icon: BookOpen },
-    { name: 'Peta Prasyarat', path: '/admin/prerequisites', icon: GitBranch },
-    { name: 'Manajemen Kelas', path: '/admin/classes', icon: ClipboardList },
-    { name: 'Jadwal Perkuliahan', path: '/admin/schedules', icon: Calendar },
-    {
-      name: 'Course Demand Analyzer',
-      path: '/admin/reports',
-      icon: BarChart3,
-      badge: 'CEIL FORMULA',
-      badgeColor: 'bg-blue-500/20 text-blue-300',
-    },
-    { name: 'Log Audit Sistem', path: '/admin/audit-logs', icon: History },
-  ];
-
-  const currentNav = role === 'student' ? studentNav : role === 'lecturer' ? lecturerNav : adminNav;
+  const currentNav = role === 'student' ? studentNav : lecturerNav;
 
   return (
     <>
@@ -177,11 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
           <div className="px-3 pb-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {role === 'student'
-                ? 'Menu Akademik Mahasiswa'
-                : role === 'lecturer'
-                  ? 'Menu Dosen Pembimbing'
-                  : 'Menu Administrasi Prodi'}
+              {role === 'student' ? 'Menu Akademik Mahasiswa' : 'Menu Dosen Pembimbing'}
             </p>
           </div>
 
