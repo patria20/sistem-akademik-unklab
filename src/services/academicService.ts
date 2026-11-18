@@ -22,7 +22,15 @@ import {
   MOCK_NOTIFICATIONS,
   MOCK_AUDIT_LOGS,
   MOCK_GRADES_DAVID,
+  MOCK_INITIAL_GRADES,
 } from '../data/mockAcademicData';
+
+export interface ClassGradeInput {
+  studentId: string;
+  tugas: number;
+  uts: number;
+  uas: number;
+}
 
 const STORAGE_KEYS = {
   STUDENTS: 'siam_unklab_students',
@@ -81,7 +89,7 @@ export class AcademicService {
       setStoredItem(STORAGE_KEYS.AUDIT_LOGS, MOCK_AUDIT_LOGS);
     }
     if (!localStorage.getItem(STORAGE_KEYS.GRADES)) {
-      setStoredItem(STORAGE_KEYS.GRADES, MOCK_GRADES_DAVID);
+      setStoredItem(STORAGE_KEYS.GRADES, MOCK_INITIAL_GRADES);
     }
   }
 
@@ -136,10 +144,137 @@ export class AcademicService {
     this.addAuditLog('Dosen PA', 'lecturer', 'ADD_CLASS', `Membuka kelas baru: ${cls.courseCode} Seksi ${cls.section}`);
   }
 
-  // Grades
+  // Grades & Transcripts
+  static scoreToGrade(score: number): { letter: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'D' | 'F'; point: number } {
+    if (score >= 85) return { letter: 'A', point: 4.0 };
+    if (score >= 80) return { letter: 'A-', point: 3.75 };
+    if (score >= 75) return { letter: 'B+', point: 3.5 };
+    if (score >= 70) return { letter: 'B', point: 3.0 };
+    if (score >= 65) return { letter: 'B-', point: 2.75 };
+    if (score >= 60) return { letter: 'C+', point: 2.5 };
+    if (score >= 55) return { letter: 'C', point: 2.0 };
+    if (score >= 45) return { letter: 'D', point: 1.0 };
+    return { letter: 'F', point: 0.0 };
+  }
+
+  static getAllGrades(): GradeRecord[] {
+    return getStoredItem<GradeRecord[]>(STORAGE_KEYS.GRADES, MOCK_INITIAL_GRADES);
+  }
+
   static getGradesByStudentId(studentId: string): GradeRecord[] {
-    const grades = getStoredItem<GradeRecord[]>(STORAGE_KEYS.GRADES, MOCK_GRADES_DAVID);
-    return grades.filter((g) => g.studentId === studentId || studentId === 'std_01');
+    const grades = this.getAllGrades();
+    return grades.filter((g) => g.studentId === studentId);
+  }
+
+  static getGradesByClassId(classId: string): GradeRecord[] {
+    const grades = this.getAllGrades();
+    return grades.filter((g) => g.classId === classId);
+  }
+
+  static saveClassGrades(
+    classId: string,
+    inputs: ClassGradeInput[],
+    lecturerName: string = 'Semmy W. Taju, S.Kom., M.S., Ph.D.'
+  ): GradeRecord[] {
+    const classes = this.getClasses();
+    const cls = classes.find((c) => c.id === classId);
+    const courseCode = cls ? cls.courseCode : 'IF-MK';
+    const courseName = cls ? cls.courseName : 'Mata Kuliah';
+    const courseCredits = cls ? cls.credits : 3;
+    const courseId = cls ? cls.courseId : `crs_${classId}`;
+
+    const allGrades = this.getAllGrades();
+    const savedRecords: GradeRecord[] = [];
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    inputs.forEach((input) => {
+      const finalScore = Math.round(input.tugas * 0.3 + input.uts * 0.3 + input.uas * 0.4);
+      const { letter, point } = this.scoreToGrade(finalScore);
+      const isPassed = !['D', 'F'].includes(letter);
+
+      const existingIndex = allGrades.findIndex(
+        (g) => g.studentId === input.studentId && (g.classId === classId || g.courseCode === courseCode)
+      );
+
+      const gradeRecord: GradeRecord = {
+        id: existingIndex !== -1 ? allGrades[existingIndex].id : `grd_${Date.now()}_${input.studentId}`,
+        studentId: input.studentId,
+        courseId,
+        courseCode,
+        courseName,
+        credits: courseCredits,
+        semester: 5,
+        academicYear: '2026/2027 Ganjil',
+        score: finalScore,
+        componentScores: {
+          tugas: input.tugas,
+          uts: input.uts,
+          uas: input.uas,
+        },
+        classId,
+        lecturerName,
+        letterGrade: letter,
+        gradePoint: point,
+        isPassed,
+        updatedAt: now,
+      };
+
+      if (existingIndex !== -1) {
+        allGrades[existingIndex] = gradeRecord;
+      } else {
+        allGrades.push(gradeRecord);
+      }
+      savedRecords.push(gradeRecord);
+
+      // Re-calculate Student GPA (IPK), IPS, and Credits Earned
+      const studentGrades = allGrades.filter((g) => g.studentId === input.studentId);
+      const totalCredits = studentGrades.reduce((sum, g) => sum + g.credits, 0);
+      const totalPoints = studentGrades.reduce((sum, g) => sum + g.gradePoint * g.credits, 0);
+      const newGpa = totalCredits > 0 ? Number((totalPoints / totalCredits).toFixed(2)) : 0;
+      const passedCredits = studentGrades.filter((g) => g.isPassed).reduce((sum, g) => sum + g.credits, 0);
+
+      const sem5Grades = studentGrades.filter((g) => g.semester === 5);
+      const sem5Credits = sem5Grades.reduce((sum, g) => sum + g.credits, 0);
+      const sem5Points = sem5Grades.reduce((sum, g) => sum + g.gradePoint * g.credits, 0);
+      const newIps = sem5Credits > 0 ? Number((sem5Points / sem5Credits).toFixed(2)) : newGpa;
+
+      this.updateStudent(input.studentId, {
+        cumulativeGpa: newGpa,
+        lastSemesterGpa: newIps,
+        creditsEarned: passedCredits,
+      });
+
+      // Send notification to student
+      const student = this.getStudentById(input.studentId);
+      if (student) {
+        this.addNotification({
+          id: `notif_${Date.now()}_${input.studentId}`,
+          userId: student.userId,
+          title: 'Nilai Perkuliahan Diterbitkan',
+          message: `Nilai mata kuliah ${courseCode} (${courseName}) telah diterbitkan oleh dosen ${lecturerName} dengan hasil ${letter} (${finalScore}).`,
+          type: isPassed ? 'success' : 'warning',
+          link: '/student/grades',
+          read: false,
+          createdAt: 'Baru saja',
+        });
+      }
+    });
+
+    setStoredItem(STORAGE_KEYS.GRADES, allGrades);
+
+    // Audit Log
+    this.addAuditLog(
+      lecturerName,
+      'lecturer',
+      'INPUT_GRADES',
+      `Menyimpan dan mempublikasikan nilai kelas ${courseCode} (${cls?.section || 'A'}) untuk ${inputs.length} mahasiswa ke Transkrip Akademik.`
+    );
+
+    return savedRecords;
+  }
+
+  static resetGradesToDefault(): void {
+    setStoredItem(STORAGE_KEYS.GRADES, MOCK_INITIAL_GRADES);
   }
 
   // Study Plans (KRS)
@@ -240,7 +375,7 @@ export class AcademicService {
     krsId: string,
     decision: 'approved' | 'revision',
     feedback: string,
-    reviewerName: string = 'Dr. Ronny Gosal, M.Kom.'
+    reviewerName: string = 'Semmy W. Taju, S.Kom., M.S., Ph.D.'
   ): void {
     const plans = this.getStudyPlans();
     const plan = plans.find((p) => p.id === krsId);

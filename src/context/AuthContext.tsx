@@ -147,9 +147,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     {
       role: 'lecturer' as UserRole,
-      label: 'Dosen (Dr. Ronny Gosal, M.Kom.)',
+      label: 'Dosen PA (Semmy W. Taju, S.Kom., M.S., Ph.D.)',
       email: 'dosen@unklab.ac.id',
-      name: 'Dr. Ronny Gosal, M.Kom. (0912038401)',
+      name: 'Semmy W. Taju, S.Kom., M.S., Ph.D. (0914097501)',
     },
   ];
 
