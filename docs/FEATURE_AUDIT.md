@@ -1,4 +1,4 @@
-# FEATURE AUDIT REPORT — SIAM-UNKLAB
+﻿# FEATURE AUDIT REPORT â€” SIAM-UNKLAB
 **Audit Fungsionalitas Modul, Interaktivitas Tombol, Form, dan Validasi Bisnis**
 
 *Status Acuan: PASS (Berjalan Penuh), PARTIAL (Sebagian), FAIL (Gagal), NOT IMPLEMENTED (Belum Ada)*
@@ -23,7 +23,7 @@
 
 | Fitur | Elemen / Alur | Deskripsi Pengujian | Status | Catatan / Bukti |
 |---|---|---|---|---|
-| **Dashboard** | KPI Cards | Menampilkan IPK, IPS, SKS Lulus, dan SKS Ditempuh | **PASS** | Nilai sinkron dengan profil `David Wowor` (IPK 3.82, SKS 110/144). |
+| **Dashboard** | KPI Cards | Menampilkan IPK, IPS, SKS Lulus, dan SKS Ditempuh | **PASS** | Nilai sinkron dengan profil `Syalom Mauren Angginaloy` (IPK 3.82, SKS 110/144). |
 | **Dashboard** | Recharts Grafik Tren | Menampilkan chart area IPS vs IPK dari Semester 1 s/d 5 | **PASS** | Tooltip interaktif bekerja, kurva halus sesuai data riwayat. |
 | **KRS Builder** | Pemilihan Kelas | Menambah mata kuliah ke keranjang rencana studi | **PASS** | Tombol `Pilih Kelas` menambahkan item ke daftar ringkasan. |
 | **KRS Builder** | Hapus Kelas | Menghapus mata kuliah dari rencana studi | **PASS** | Menghapus item seketika dan mengkalkulasi ulang total SKS. |

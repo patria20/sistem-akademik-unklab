@@ -1,3 +1,10 @@
+import {
+  calculateAcademicProgress,
+  calculateCumulativeGPA,
+  calculateMaxCreditLimit,
+  getLatestOfficialAttempts,
+  PASSING_GRADES,
+} from '../../utils/gpaCalculator';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
@@ -17,14 +24,57 @@ import {
 } from 'lucide-react';
 
 export const AIAssistantPage: React.FC = () => {
-  const { activeStudent, courses, grades } = useAcademic();
+  const { activeStudent, courses, grades, studyPlans } = useAcademic();
+
+  const currentKrs = activeStudent
+    ? studyPlans.find(
+        (plan) =>
+          plan.studentId === activeStudent.id &&
+          plan.semester === activeStudent.currentSemester &&
+          plan.academicYear === activeStudent.academicYear &&
+          (plan.status === 'submitted' || plan.status === 'approved')
+      )
+    : undefined;
+
+  const latestAttempts = getLatestOfficialAttempts(grades);
+
+  const passedCourseIds = latestAttempts
+    .filter(
+      (grade) =>
+        grade.isPassed &&
+        PASSING_GRADES.includes(grade.letterGrade)
+    )
+    .map((grade) => grade.courseId);
+
+  const currentEnrolledCredits = (currentKrs?.items ?? [])
+    .filter((item) => !passedCourseIds.includes(item.courseId))
+    .reduce((sum, item) => sum + item.credits, 0);
+
+  const progress = calculateAcademicProgress(
+    grades,
+    currentEnrolledCredits,
+    151
+  );
+
+  const cumulativeGpa = calculateCumulativeGPA(grades);
+
+  const maxCreditLimit = calculateMaxCreditLimit(
+    cumulativeGpa ?? 0
+  );
 
   const [messages, setMessages] = useState<AIMessage[]>([
     {
       id: 'init_1',
       sender: 'assistant',
-      text: `Halo ${activeStudent?.name || 'Mahasiswa'}! Saya adalah **AI Academic Assistant SIAM-UNKLAB**. 
-Saya dapat membantu Anda merencanakan studi, memeriksa pemenuhan prasyarat kurikulum, dan memberikan rekomendasi rencana KRS semester berikutnya berdasarkan capaian akademik Anda (IPK ${activeStudent?.cumulativeGpa}, SKS Lulus ${activeStudent?.creditsEarned}).
+      text: `Halo ${activeStudent?.name || 'Mahasiswa'}! Saya adalah **AI Academic Assistant SIAM-UNKLAB**.
+Saya dapat membantu Anda merencanakan studi, memeriksa pemenuhan prasyarat kurikulum, dan memberikan rekomendasi rencana KRS berdasarkan data akademik Anda.
+
+Ringkasan akademik saat ini:
+- IPK Kumulatif: ${cumulativeGpa?.toFixed(2) ?? 'Belum tersedia'}
+- SKS Lulus: ${progress.creditsEarned} SKS
+- SKS Sedang Ditempuh: ${progress.creditsCurrent} SKS
+- SKS Tersisa: ${progress.creditsRemaining} SKS
+- Batas Maksimal KRS: ${maxCreditLimit} SKS.
 
 Silakan pilih topik cepat di bawah ini atau ketikkan pertanyaan akademik Anda.`,
       timestamp: '09:00',
@@ -72,7 +122,8 @@ Silakan pilih topik cepat di bawah ini atau ketikkan pertanyaan akademik Anda.`,
         prompt,
         activeStudent,
         courses,
-        grades
+        grades,
+        currentEnrolledCredits
       );
       setMessages((prev) => [...prev, aiResponse]);
     } catch {
@@ -202,7 +253,7 @@ Silakan pilih topik cepat di bawah ini atau ketikkan pertanyaan akademik Anda.`,
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce"></span>
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.2s]"></span>
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce [animation-delay:0.4s]"></span>
-                <span className="text-[11px] ml-1">AI sedang menganalisis kurikulum & prasyarat...</span>
+                <span className="text-[11px] ml-1"></span>
               </div>
             </div>
           )}

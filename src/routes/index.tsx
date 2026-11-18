@@ -15,7 +15,8 @@ import { StudentDashboard } from '../pages/student/StudentDashboard';
 import { StudyPlanPage } from '../pages/student/StudyPlanPage';
 import { AcademicProgressPage } from '../pages/student/AcademicProgressPage';
 import { GradesPage } from '../pages/student/GradesPage';
-import { AttendancePage } from '../pages/student/AttendancePage';
+import { AcademicHistoryPage } from '../pages/student/AcademicHistoryPage';
+import { ReportProblemPage } from '../pages/student/ReportProblemPage';
 import { SchedulePage } from '../pages/student/SchedulePage';
 import { ConsultationPage } from '../pages/student/ConsultationPage';
 import { AIAssistantPage } from '../pages/student/AIAssistantPage';
@@ -28,12 +29,6 @@ import { LecturerAttendancePage } from '../pages/lecturer/LecturerAttendancePage
 import { LecturerGradesPage } from '../pages/lecturer/LecturerGradesPage';
 import { LecturerConsultationPage } from '../pages/lecturer/LecturerConsultationPage';
 import { LecturerClassAnalysisPage } from '../pages/lecturer/LecturerClassAnalysisPage';
-
-// Admin Pages
-import { AdminDashboard } from '../pages/admin/AdminDashboard';
-import { CourseDemandAnalyzerPage } from '../pages/admin/CourseDemandAnalyzerPage';
-import { AdminCoursesPage } from '../pages/admin/AdminCoursesPage';
-import { AdminAuditLogsPage } from '../pages/admin/AdminAuditLogsPage';
 
 export const AppRoutes: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
@@ -49,13 +44,7 @@ export const AppRoutes: React.FC = () => {
         element={
           isAuthenticated && user ? (
             <Navigate
-              to={
-                user.role === 'student'
-                  ? '/student/dashboard'
-                  : user.role === 'lecturer'
-                    ? '/lecturer/dashboard'
-                    : '/admin/dashboard'
-              }
+              to={user.role === 'student' ? '/student/dashboard' : '/lecturer/dashboard'}
               replace
             />
           ) : (
@@ -101,10 +90,18 @@ export const AppRoutes: React.FC = () => {
           }
         />
         <Route
-          path="/student/attendance"
+          path="/student/academic-history"
           element={
             <RoleRouteGuard allowedRole="student">
-              <AttendancePage />
+              <AcademicHistoryPage />
+            </RoleRouteGuard>
+          }
+        />
+        <Route
+          path="/student/report-problem"
+          element={
+            <RoleRouteGuard allowedRole="student">
+              <ReportProblemPage />
             </RoleRouteGuard>
           }
         />
@@ -195,96 +192,6 @@ export const AppRoutes: React.FC = () => {
           element={
             <RoleRouteGuard allowedRole="lecturer">
               <LecturerClassAnalysisPage />
-            </RoleRouteGuard>
-          }
-        />
-
-        {/* Admin Routes */}
-        <Route
-          path="/admin/dashboard"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminDashboard />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/reports"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <CourseDemandAnalyzerPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/courses"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminCoursesPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/prerequisites"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminCoursesPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/classes"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <CourseDemandAnalyzerPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/students"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminDashboard />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/lecturers"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminDashboard />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/programs"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminCoursesPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/curriculums"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminCoursesPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/schedules"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <CourseDemandAnalyzerPage />
-            </RoleRouteGuard>
-          }
-        />
-        <Route
-          path="/admin/audit-logs"
-          element={
-            <RoleRouteGuard allowedRole="admin">
-              <AdminAuditLogsPage />
             </RoleRouteGuard>
           }
         />

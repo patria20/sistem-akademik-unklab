@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+﻿import React, { useState } from 'react';
+import { useAuth, detectRoleFromUnklabEmail } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useNavigate, Link } from 'react-router';
 import {
   GraduationCap,
   UserCheck,
-  Shield,
   Lock,
   Mail,
   AlertCircle,
@@ -17,29 +16,29 @@ import {
 import type { UserRole } from '../../types/academic';
 
 export const LoginPage: React.FC = () => {
-  const { login, demoAccounts } = useAuth();
+  const { login } = useAuth();
   const { success, danger } = useToast();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('mahasiswa@unklab.ac.id');
-  const [password, setPassword] = useState('student123');
+  const [email, setEmail] = useState('12410619@student.unklab.ac.id');
+  const [password, setPassword] = useState('unklab2026');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<UserRole>('student');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleQuickDemo = (demoRole: UserRole, demoEmail: string) => {
-    setSelectedRole(demoRole);
+  const detectedRole = detectRoleFromUnklabEmail(email);
+
+  const handleQuickDemo = (_demoRole: UserRole, demoEmail: string) => {
     setEmail(demoEmail);
-    setPassword('demopass123');
+    setPassword('unklab2026');
     setErrorMsg(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) {
-      setErrorMsg('Mohon isi alamat email dan kata sandi Anda.');
+      setErrorMsg('Mohon isi alamat email UNKLAB dan kata sandi Anda.');
       return;
     }
 
@@ -47,19 +46,21 @@ export const LoginPage: React.FC = () => {
     setErrorMsg(null);
 
     setTimeout(() => {
-      const loginSuccess = login(email, selectedRole);
+      const result = login(email, password);
       setIsLoading(false);
 
-      if (loginSuccess) {
+      if (result.success && result.user) {
         success('Login Berhasil', 'Selamat datang di Portal Akademik SIAM-UNKLAB.');
-        if (selectedRole === 'student') navigate('/student/dashboard');
-        else if (selectedRole === 'lecturer') navigate('/lecturer/dashboard');
-        else if (selectedRole === 'admin') navigate('/admin/dashboard');
+        const targetPath =
+          result.user.role === 'student' ? '/student/dashboard' : '/lecturer/dashboard';
+        navigate(targetPath, { replace: true });
       } else {
-        setErrorMsg('Email atau kredensial akun tidak ditemukan pada sistem simulasi.');
-        danger('Login Gagal', 'Periksa kembali alamat email dan peran yang dipilih.');
+        const message =
+          result.error || 'Email UNKLAB tidak valid. Gunakan @student.unklab.ac.id atau @unklab.ac.id.';
+        setErrorMsg(message);
+        danger('Login Gagal', message);
       }
-    }, 450);
+    }, 350);
   };
 
   return (
@@ -98,52 +99,43 @@ export const LoginPage: React.FC = () => {
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                Pilih Cepat Aku Demo (1-Klik):
+                Pilih Cepat Akun (1-Klik):
               </label>
-              <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
-                Simulasi Aktif
-              </span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
+            </div> 
+            <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => handleQuickDemo('student', 'mahasiswa@unklab.ac.id')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
-                  selectedRole === 'student'
+                onClick={() => handleQuickDemo('student', '12410619@student.unklab.ac.id')}
+                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  detectedRole === 'student'
                     ? 'border-blue-600 bg-blue-50 text-blue-800 font-bold shadow-xs'
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <GraduationCap className="w-5 h-5 mx-auto mb-1 text-blue-600" />
-                <span className="text-[11px] block">Mahasiswa</span>
+                <span className="text-xs block">Mahasiswa</span>
+                <span className="text-[10px] text-slate-500 font-normal block truncate">
+                  @student.unklab.ac.id
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickDemo('lecturer', 'dosen@unklab.ac.id')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
-                  selectedRole === 'lecturer'
+                className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
+                  detectedRole === 'lecturer'
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-800 font-bold shadow-xs'
                     : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
                 <UserCheck className="w-5 h-5 mx-auto mb-1 text-emerald-600" />
-                <span className="text-[11px] block">Dosen PA</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('admin', 'admin@unklab.ac.id')}
-                className={`p-2.5 rounded-xl border text-center transition-all ${
-                  selectedRole === 'admin'
-                    ? 'border-purple-600 bg-purple-50 text-purple-800 font-bold shadow-xs'
-                    : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Shield className="w-5 h-5 mx-auto mb-1 text-purple-600" />
-                <span className="text-[11px] block">Admin</span>
+                <span className="text-xs block">Dosen PA</span>
+                <span className="text-[10px] text-slate-500 font-normal block truncate">
+                  @unklab.ac.id
+                </span>
               </button>
             </div>
           </div>
-
+ 
           {errorMsg && (
             <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -153,25 +145,44 @@ export const LoginPage: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                Alamat Email Universitas Klabat
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-bold text-slate-700">
+                  Email UNKLAB
+                </label>
+                {detectedRole && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      detectedRole === 'student'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}
+                  >
+                    Terdeteksi: {detectedRole === 'student' ? 'Mahasiswa' : 'Dosen'}
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nama@unklab.ac.id"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="12410619@student.unklab.ac.id atau dosen@unklab.ac.id"
                   className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 font-medium"
                 />
               </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Mahasiswa: <code>nim@student.unklab.ac.id</code> â€¢ Dosen: <code>nama@unklab.ac.id</code>
+              </p>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Kata Sandi (Password)
+                Kata Sandi
               </label>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -179,8 +190,11 @@ export const LoginPage: React.FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="Masukkan password bebas..."
                   className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 font-medium"
                 />
                 <button

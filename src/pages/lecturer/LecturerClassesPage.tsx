@@ -1,43 +1,39 @@
 import React, { useState, useMemo } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
-import { BookOpen, Users, Calendar, MapPin, Clock, Search } from 'lucide-react';
 
 export const LecturerClassesPage: React.FC = () => {
   const { activeLecturer, classes, students, studyPlans } = useAcademic();
-  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
+
+  const [selectedClassId, setSelectedClassId] = useState<string>(
+    classes[0]?.id || ''
+  );
 
   if (!activeLecturer) return null;
 
-  const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
+  // Hanya kelas yang diampu dosen yang sedang login
+  const lecturerClasses = classes.filter(
+    (cls) => cls.lecturerId === activeLecturer.id
+  );
 
-  // Hitung jumlah mahasiswa terdaftar per kelas secara dinamis dari data StudyPlan (KRS)
-  const enrolledCountByClass = useMemo(() => {
-    const counts: Record<string, number> = {};
-    studyPlans.forEach((sp) => {
-      sp.items.forEach((item) => {
-        counts[item.classId] = (counts[item.classId] || 0) + 1;
-      });
+  const currentClass =
+    lecturerClasses.find((cls) => cls.id === selectedClassId) ||
+    lecturerClasses[0];
+
+  // Mengambil mahasiswa dengan KRS yang terdaftar pada kelas ini
+  const getApprovedRoster = (classId: string) => {
+    const registeredStudentIds = new Set<string>();
+
+    studyPlans.forEach((plan) => {
+      if (plan.items.some((item) => item.classId === classId)) {
+        registeredStudentIds.add(plan.studentId);
+      }
     });
-    return counts;
-  }, [studyPlans]);
 
-  const currentClass = classes.find((c) => c.id === selectedClassId) || lecturerClasses[0];
-
-  // Mahasiswa yang terdaftar di kelas yang dipilih (berdasarkan classId di study plan items)
-  const enrolledStudentIds = useMemo(() => {
-    const ids = new Set<string>();
-    studyPlans.forEach((sp) => {
-      sp.items.forEach((item) => {
-        if (item.classId === currentClass?.id) {
-          ids.add(sp.studentId);
-        }
-      });
-    });
-    return ids;
-  }, [currentClass, studyPlans]);
-
-  const enrolledStudents = students.filter((std) => enrolledStudentIds.has(std.id));
+    return students.filter((student) =>
+      registeredStudentIds.has(student.id)
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -54,6 +50,7 @@ export const LecturerClassesPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {lecturerClasses.map((cls) => {
           const isSelected = cls.id === (currentClass?.id || '');
+          const roster = getApprovedRoster(cls.id);
 
           return (
             <div
@@ -69,15 +66,23 @@ export const LecturerClassesPage: React.FC = () => {
                 <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 font-mono text-[10px] font-bold">
                   {cls.courseCode} ({cls.section})
                 </span>
-                <span className="text-xs font-bold text-slate-700">{cls.credits} SKS</span>
+
+                <span className="text-xs font-bold text-slate-700">
+                  {cls.credits} SKS
+                </span>
               </div>
-              <h3 className="font-bold text-slate-900 text-xs line-clamp-1">{cls.courseName}</h3>
+
+              <h3 className="font-bold text-slate-900 text-xs line-clamp-1">
+                {cls.courseName}
+              </h3>
+
               <p className="text-[11px] text-slate-500 mt-2 flex items-center justify-between">
                 <span>
                   {cls.day}, {cls.startTime}
                 </span>
+
                 <span className="font-bold text-blue-600">
-                  {enrolledCountByClass[cls.id] || 0} / {cls.capacity} Mhs
+                  {roster.length} / {cls.capacity} Mhs
                 </span>
               </p>
             </div>
@@ -85,55 +90,93 @@ export const LecturerClassesPage: React.FC = () => {
         })}
       </div>
 
-      {/* Roster Table of Current Selected Class */}
-      {currentClass && (
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="font-bold text-sm text-[#142B4A]">
-                Roster Mahasiswa Terdaftar: {currentClass.courseName} ({currentClass.section})
-              </h3>
-              <p className="text-xs text-slate-500">
-                Jadwal: {currentClass.day}, {currentClass.startTime}-{currentClass.endTime} WITA • Ruangan: {currentClass.room}
-              </p>
-            </div>
-            <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 self-start sm:self-auto">
-              {enrolledStudents.length} Mahasiswa Terdaftar
-            </span>
-          </div>
+      {/* Roster Table */}
+      {currentClass && (() => {
+        const roster = getApprovedRoster(currentClass.id);
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px] bg-slate-50">
-                  <th className="py-3 px-4">No</th>
-                  <th className="py-3 px-4">Nama Mahasiswa</th>
-                  <th className="py-3 px-4">NIM</th>
-                  <th className="py-3 px-4">Program Studi</th>
-                  <th className="py-3 px-4 text-center">Semester</th>
-                  <th className="py-3 px-4 text-center">Status KRS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {enrolledStudents.map((std, idx) => (
-                  <tr key={std.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3 px-4 text-slate-400">{idx + 1}</td>
-                    <td className="py-3 px-4 font-bold text-slate-800">{std.name}</td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{std.nim}</td>
-                    <td className="py-3 px-4 text-slate-600">{std.programStudy}</td>
-                    <td className="py-3 px-4 text-center font-medium text-slate-700">Sem {std.currentSemester}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                        TERDAFTAR RESMI
-                      </span>
-                    </td>
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-sm text-[#142B4A]">
+                  Roster Mahasiswa Terdaftar: {currentClass.courseName} (
+                  {currentClass.section})
+                </h3>
+
+                <p className="text-xs text-slate-500">
+                  Jadwal: {currentClass.day}, {currentClass.startTime}-
+                  {currentClass.endTime} WITA • Ruangan: {currentClass.room}
+                </p>
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 self-start sm:self-auto">
+                {roster.length} Mahasiswa Terdaftar
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px] bg-slate-50">
+                    <th className="py-3 px-4">No</th>
+                    <th className="py-3 px-4">Nama Mahasiswa</th>
+                    <th className="py-3 px-4">NIM</th>
+                    <th className="py-3 px-4">Program Studi</th>
+                    <th className="py-3 px-4 text-center">Semester</th>
+                    <th className="py-3 px-4 text-center">Status KRS</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {roster.length > 0 ? (
+                    roster.map((std, idx) => (
+                      <tr
+                        key={std.id}
+                        className="hover:bg-slate-50/70 transition-colors"
+                      >
+                        <td className="py-3 px-4 text-slate-400">
+                          {idx + 1}
+                        </td>
+
+                        <td className="py-3 px-4 font-bold text-slate-800">
+                          {std.name}
+                        </td>
+
+                        <td className="py-3 px-4 font-mono text-slate-600">
+                          {std.nim}
+                        </td>
+
+                        <td className="py-3 px-4 text-slate-600">
+                          {std.programStudy}
+                        </td>
+
+                        <td className="py-3 px-4 text-center font-medium text-slate-700">
+                          Sem {std.currentSemester}
+                        </td>
+
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                            TERDAFTAR RESMI
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="py-10 px-4 text-center text-slate-500"
+                      >
+                        Belum ada mahasiswa dengan KRS yang disetujui pada kelas ini.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

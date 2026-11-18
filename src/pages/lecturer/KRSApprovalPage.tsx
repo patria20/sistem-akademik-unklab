@@ -3,7 +3,10 @@ import { useAcademic } from '../../context/AcademicContext';
 import { useToast } from '../../context/ToastContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import type { StudyPlan } from '../../types/academic';
+import type {
+  StudyPlan,
+  AddDropRequest,
+} from '../../types/academic';
 import {
   FileCheck,
   CheckCircle2,
@@ -21,13 +24,22 @@ import {
 } from 'lucide-react';
 
 export const KRSApprovalPage: React.FC = () => {
-  const { studyPlans, students, reviewKrs } = useAcademic();
+  const [actionSuccessToast, setActionSuccessToast] = useState<string | null>(null);
+  
+  const {
+  studyPlans,
+  students,
+  reviewKrs,
+  activeLecturer,
+  addDropRequests,
+  reviewAddDropRequest,
+} = useAcademic();
   const { success, warning } = useToast();
 
   const [selectedPlan, setSelectedPlan] = useState<StudyPlan | null>(null);
   const [feedbackNote, setFeedbackNote] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [actionSuccessToast, setActionSuccessToast] = useState<string | null>(null);
+  const [addDropFeedback, setAddDropFeedback] = useState<Record<string, string>>({});
 
   const filteredPlans = studyPlans.filter((p) => {
     if (filterStatus === 'all') return true;
@@ -61,6 +73,48 @@ export const KRSApprovalPage: React.FC = () => {
     setTimeout(() => setActionSuccessToast(null), 4000);
   };
 
+  const lecturerAddDropRequests = addDropRequests.filter((request) => {
+  const student = students.find(
+    (item) => item.id === request.studentId
+  );
+
+  return (
+    student?.academicAdvisorId === activeLecturer?.id
+  );
+});
+
+const handleReviewAddDrop = (
+  request: AddDropRequest,
+  decision: 'approved' | 'rejected'
+) => {
+  try {
+    reviewAddDropRequest(
+      request.id,
+      decision,
+      addDropFeedback[request.id] || ''
+    );
+
+    success(
+      decision === 'approved'
+        ? 'Permintaan Add & Drop Disetujui'
+        : 'Permintaan Add & Drop Ditolak',
+      `Permintaan ${request.type.toUpperCase()} dari ${request.studentName} berhasil diproses.`
+    );
+
+    setAddDropFeedback((current) => ({
+      ...current,
+      [request.id]: '',
+    }));
+  } catch (error) {
+    warning(
+      'Gagal Memproses Permintaan',
+      error instanceof Error
+        ? error.message
+        : 'Terjadi kesalahan saat memproses permintaan.'
+    );
+  }
+};
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -78,6 +132,169 @@ export const KRSApprovalPage: React.FC = () => {
           <span>{actionSuccessToast}</span>
         </div>
       )}
+
+      {/* Permintaan Add & Drop Mahasiswa Bimbingan */}
+<div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+  <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+    <div>
+      <h2 className="text-sm font-bold text-[#142B4A]">
+        Permintaan Add & Drop Mata Kuliah
+      </h2>
+      <p className="text-xs text-slate-500 mt-1">
+        Tinjau perubahan KRS dari mahasiswa bimbingan akademik Anda.
+      </p>
+    </div>
+
+    <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">
+      {lecturerAddDropRequests.filter(
+        (request) => request.status === 'submitted'
+      ).length} Menunggu
+    </span>
+  </div>
+
+  <div className="p-5 space-y-4">
+    {lecturerAddDropRequests.length === 0 ? (
+      <div className="p-6 text-center rounded-xl bg-slate-50 border border-dashed border-slate-200">
+        <FileCheck className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+        <p className="text-xs text-slate-500">
+          Belum ada permintaan Add & Drop dari mahasiswa bimbingan Anda.
+        </p>
+      </div>
+    ) : (
+      lecturerAddDropRequests.map((request) => (
+        <div
+          key={request.id}
+          className="p-4 rounded-xl border border-slate-200 space-y-3"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`px-2 py-1 rounded-md text-[10px] font-bold ${
+                    request.type === 'add'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-red-100 text-red-700'
+                  }`}
+                >
+                  {request.type === 'add' ? 'ADD' : 'DROP'}
+                </span>
+
+                <span
+                  className={`px-2 py-1 rounded-md text-[10px] font-bold ${
+                    request.status === 'approved'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : request.status === 'rejected'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {request.status === 'approved'
+                    ? 'Disetujui'
+                    : request.status === 'rejected'
+                    ? 'Ditolak'
+                    : 'Menunggu Tinjauan'}
+                </span>
+              </div>
+
+              <h3 className="text-sm font-bold text-slate-900 mt-2">
+                {request.courseItem.courseCode} -{' '}
+                {request.courseItem.courseName}
+              </h3>
+
+              <p className="text-[11px] text-slate-500 mt-1">
+                Paralel {request.courseItem.section} ·{' '}
+                {request.courseItem.credits} SKS
+              </p>
+            </div>
+
+            <div className="text-right">
+              <p className="text-xs font-bold text-slate-800">
+                {request.studentName}
+              </p>
+              <p className="text-[10px] text-slate-500 font-mono">
+                NIM: {request.studentNim}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-slate-50 text-xs text-slate-700 space-y-1">
+            <p>
+              <strong>Alasan mahasiswa:</strong>
+            </p>
+            <p>{request.reason}</p>
+            <p className="text-[10px] text-slate-400 pt-1">
+              Diajukan:{' '}
+              {new Date(request.submittedAt).toLocaleString('id-ID')}
+            </p>
+          </div>
+
+          {request.status === 'submitted' ? (
+            <>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Tanggapan Dosen PA
+                </label>
+                <textarea
+                  rows={2}
+                  value={addDropFeedback[request.id] || ''}
+                  onChange={(e) =>
+                    setAddDropFeedback((current) => ({
+                      ...current,
+                      [request.id]: e.target.value,
+                    }))
+                  }
+                  placeholder="Tuliskan catatan atau alasan keputusan..."
+                  className="w-full p-3 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() =>
+                    handleReviewAddDrop(request, 'rejected')
+                  }
+                  className="flex-1 py-2.5 rounded-xl bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 text-xs font-bold flex items-center justify-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Tolak Permintaan
+                </button>
+
+                <button
+                  onClick={() =>
+                    handleReviewAddDrop(request, 'approved')
+                  }
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-2"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Setujui Permintaan
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-xs text-slate-600">
+              <p>
+                <strong>Keputusan:</strong>{' '}
+                {request.status === 'approved'
+                  ? 'Disetujui'
+                  : 'Ditolak'}
+              </p>
+              {request.feedback && (
+                <p className="mt-1">
+                  <strong>Tanggapan:</strong> {request.feedback}
+                </p>
+              )}
+              {request.reviewerName && (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Ditinjau oleh {request.reviewerName}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      ))
+    )}
+  </div>
+</div>
 
       {/* Filter Tabs */}
       <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200/80 shadow-xs w-fit">

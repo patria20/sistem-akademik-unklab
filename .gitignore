@@ -24,3 +24,8 @@ dist-ssr
 *.sln
 *.sw?
 .commandcode
+
+# Secret keys
+.env
+.env.*
+!.env.example

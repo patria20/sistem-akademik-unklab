@@ -1,18 +1,30 @@
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { useToast } from '../../context/ToastContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { validateStudyPlan, checkPrerequisite, validateClassCapacity } from '../../utils/academicValidator';
-import type { CourseClass, StudyPlanItem } from '../../types/academic';
 import {
-  BookOpen,
+  validateStudyPlan,
+  checkPrerequisite,
+  validateClassCapacity,
+} from '../../utils/academicValidator';
+import type {
+  CourseClass,
+  StudyPlanItem,
+  AddDropRequest,
+} from '../../types/academic';
+import {
+  calculateCumulativeGPA,
+  calculateMaxCreditLimit,
+  PASSING_GRADES,
+  isOfficialGrade,
+  getLatestOfficialAttempts,
+} from '../../utils/gpaCalculator';
+import {
   Search,
-  Filter,
-  Plus,
   Trash2,
   Calendar,
-  Clock,
   MapPin,
   User,
   AlertTriangle,
@@ -20,9 +32,9 @@ import {
   Send,
   Save,
   Info,
-  Check,
   AlertCircle,
-  HelpCircle,
+  PlusCircle,
+  ClipboardList,
 } from 'lucide-react';
 
 export const StudyPlanPage: React.FC = () => {
@@ -32,25 +44,56 @@ export const StudyPlanPage: React.FC = () => {
     classes,
     activeKrs,
     grades,
+    addDropRequests,
     saveKrsDraft,
     submitKrs,
+    submitAddDropRequest,
   } = useAcademic();
+
   const { success, warning } = useToast();
 
-  if (!activeStudent) return null;
-
-  // Passed Course IDs
+  // Mata kuliah yang sudah lulus dan memenuhi standar nilai kelulusan (hanya nilai resmi/disetujui dari percobaan terbaru).
   const passedCourseIds = useMemo(
-    () => grades.filter((g) => g.isPassed).map((g) => g.courseId),
+    () =>
+      Array.from(
+        new Set(
+          getLatestOfficialAttempts(grades)
+            .filter(
+              (grade) =>
+                grade.isPassed &&
+                PASSING_GRADES.includes(grade.letterGrade)
+            )
+            .map((grade) => grade.courseId)
+        )
+      ),
     [grades]
   );
 
-  // Basket / Selected Classes State initialized from activeKrs
-  const [selectedClassIds, setSelectedClassIds] = useState<string[]>(() => {
-    return activeKrs?.items.map((i) => i.classId) || [];
-  });
+  // Menghitung IPK kumulatif.
+  const cumulativeGpa = useMemo(
+    () => calculateCumulativeGPA(grades),
+    [grades]
+  );
 
-  const [studentNotes, setStudentNotes] = useState<string>(activeKrs?.notes || '');
+  // Batas maksimal SKS berdasarkan IPK.
+  const maxCreditLimit = useMemo(
+    () => calculateMaxCreditLimit(cumulativeGpa),
+    [cumulativeGpa]
+  );
+
+  // Sinkronkan pilihan kelas ketika mahasiswa atau KRS aktif berubah.
+  const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
+  const [studentNotes, setStudentNotes] = useState<string>('');
+  const [addDropType, setAddDropType] = useState<'add' | 'drop'>('add');
+  const [selectedAddClassId, setSelectedAddClassId] = useState('');
+  const [selectedDropItemId, setSelectedDropItemId] = useState('');
+  const [addDropReason, setAddDropReason] = useState('');
+
+  useEffect(() => {
+    setSelectedClassIds(activeKrs?.items.map((item) => item.classId) || []);
+    setStudentNotes(activeKrs?.notes || '');
+  }, [activeStudent?.id, activeKrs?.id]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -67,57 +110,66 @@ export const StudyPlanPage: React.FC = () => {
       selectedClasses,
       courses,
       passedCourseIds,
-      activeStudent.maxCreditLimit
+      maxCreditLimit
     );
-  }, [selectedClasses, courses, passedCourseIds, activeStudent.maxCreditLimit]);
+  }, [selectedClasses, courses, passedCourseIds, maxCreditLimit]);
 
   const totalSelectedCredits = useMemo(() => {
     return selectedClasses.reduce((sum, c) => sum + (c.credits || 0), 0);
   }, [selectedClasses]);
 
-  // Filter Catalog
-  const filteredClasses = useMemo(() => {
-    return classes.filter((cls) => {
-      const course = courses.find((c) => c.id === cls.courseId);
+  // Filter Catalog: tampilkan seluruh mata kuliah dari kurikulum.
+  const filteredCourses = useMemo(() => {
+    return courses.filter((course) => {
       const matchesSearch =
-        cls.courseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cls.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        cls.lecturerName.toLowerCase().includes(searchQuery.toLowerCase());
+        course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        course.code.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesSemester =
-        selectedSemester === 'all' || (course && course.semester.toString() === selectedSemester);
+        selectedSemester === 'all' ||
+        course.semester.toString() === selectedSemester;
 
       return matchesSearch && matchesSemester;
     });
-  }, [classes, courses, searchQuery, selectedSemester]);
+  }, [courses, searchQuery, selectedSemester]);
 
-  // Handle Add/Remove Class
+  // Pilih kelas; jika paralel lain dari mata kuliah yang sama dipilih,
+  // paralel lama akan diganti.
   const handleToggleClass = (cls: CourseClass) => {
-    if (selectedClassIds.includes(cls.id)) {
-      setSelectedClassIds(selectedClassIds.filter((id) => id !== cls.id));
-    } else {
-      // Check if already selected another section of the same course
-      const sameCourseClass = selectedClasses.find((sc) => sc.courseId === cls.courseId);
-      if (sameCourseClass) {
-        // Swap section
-        setSelectedClassIds([...selectedClassIds.filter((id) => id !== sameCourseClass.id), cls.id]);
-      } else {
-        setSelectedClassIds([...selectedClassIds, cls.id]);
+    setSelectedClassIds((currentIds) => {
+      if (currentIds.includes(cls.id)) {
+        return currentIds.filter((id) => id !== cls.id);
       }
-    }
+
+      const existingSectionId = currentIds.find((id) =>
+        classes.find((currentClass) => currentClass.id === id)?.courseId === cls.courseId
+      );
+
+      return existingSectionId
+        ? currentIds.map((id) => (id === existingSectionId ? cls.id : id))
+        : [...currentIds, cls.id];
+    });
+
     setSaveSuccessMessage(null);
   };
 
   const handleRemoveClass = (classId: string) => {
-    setSelectedClassIds(selectedClassIds.filter((id) => id !== classId));
+    setSelectedClassIds((currentIds) =>
+      currentIds.filter((id) => id !== classId)
+    );
     setSaveSuccessMessage(null);
   };
 
-  // Build StudyPlanItem array from selectedClasses
-  const buildItems = (): StudyPlanItem[] => {
+  const buildItems = (status: StudyPlanItem['status']): StudyPlanItem[] => {
+    if (!activeStudent) return [];
+
+    const studyPlanId =
+      activeKrs?.id ||
+      `krs_${activeStudent.id}_sem${activeStudent.currentSemester}`;
+
     return selectedClasses.map((cls) => ({
-      id: `itm_${cls.id}_${Date.now()}`,
-      studyPlanId: activeKrs?.id || `krs_${activeStudent.id}`,
+      id: `itm_${studyPlanId}_${cls.id}`,
+      studyPlanId,
       classId: cls.id,
       courseId: cls.courseId,
       courseCode: cls.courseCode,
@@ -129,25 +181,194 @@ export const StudyPlanPage: React.FC = () => {
       endTime: cls.endTime,
       room: cls.room,
       lecturerName: cls.lecturerName,
-      status: activeKrs?.status || 'draft',
+      status,
     }));
   };
 
   const handleSaveDraft = () => {
-    saveKrsDraft(buildItems(), studentNotes);
-    setSaveSuccessMessage('Draft KRS berhasil disimpan di sistem.');
-    success('Draf KRS Tersimpan', 'Perubahan rencana studi Anda telah tersimpan secara lokal.');
-    setTimeout(() => setSaveSuccessMessage(null), 4000);
+    if (!activeStudent) return;
+
+    try {
+      saveKrsDraft(buildItems('draft'), studentNotes);
+      setSaveSuccessMessage('Draft KRS berhasil disimpan di sistem.');
+
+      success(
+        'Draf KRS Tersimpan',
+        'Perubahan rencana studi Anda telah tersimpan secara lokal.'
+      );
+    } catch (error) {
+      warning(
+        'Draft KRS Gagal Disimpan',
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan saat menyimpan draft.'
+      );
+    }
   };
 
   const handleConfirmSubmit = () => {
-    submitKrs(buildItems(), studentNotes);
-    setIsSubmitModalOpen(false);
-    setSaveSuccessMessage('KRS berhasil dikirim ke Dosen PA Dr. Ronny Gosal untuk persetujuan.');
-    success('KRS Berhasil Dikirim', 'Pengajuan KRS Anda telah diteruskan ke Dosen PA untuk diverifikasi.');
+    if (!activeStudent) return;
+
+    const finalValidation = validateStudyPlan(
+      selectedClasses,
+      courses,
+      passedCourseIds,
+      maxCreditLimit
+    );
+
+    if (!finalValidation.isValid) {
+      warning(
+        'KRS Belum Dapat Diajukan',
+        'Periksa kembali kesalahan validasi sebelum mengirim KRS.'
+      );
+      setIsSubmitModalOpen(false);
+      return;
+    }
+
+    try {
+      submitKrs(buildItems('submitted'), studentNotes);
+      setIsSubmitModalOpen(false);
+      setSaveSuccessMessage(
+        'KRS berhasil dikirim kepada Dosen PA untuk persetujuan.'
+      );
+
+      success(
+        'KRS Berhasil Dikirim',
+        'Pengajuan KRS Anda telah diteruskan ke Dosen PA untuk diverifikasi.'
+      );
+    } catch (error) {
+      warning(
+        'Pengajuan KRS Gagal',
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan saat mengajukan KRS.'
+      );
+    }
   };
 
-  const isLocked = activeStudent.krsStatus === 'approved';
+  const isLocked = activeStudent?.krsStatus === 'approved';
+  const studentAddDropRequests = useMemo(
+  () =>
+    addDropRequests.filter(
+      (request) => request.studentId === activeStudent?.id
+    ),
+  [addDropRequests, activeStudent?.id]
+);
+
+const pendingAddCourseIds = useMemo(
+  () =>
+    studentAddDropRequests
+      .filter(
+        (request) =>
+          request.type === 'add' && request.status === 'submitted'
+      )
+      .map((request) => request.courseItem.courseId),
+  [studentAddDropRequests]
+);
+
+const pendingDropItemIds = useMemo(
+  () =>
+    studentAddDropRequests
+      .filter(
+        (request) =>
+          request.type === 'drop' && request.status === 'submitted'
+      )
+      .map((request) => request.courseItem.id),
+  [studentAddDropRequests]
+);
+
+const latestStudentGrades = useMemo(
+  () =>
+    getLatestOfficialAttempts(
+      grades.filter(
+        (grade) => grade.studentId === activeStudent?.id
+      )
+    ),
+  [grades, activeStudent?.id]
+);
+
+const passedCourseIdSet = useMemo(
+  () =>
+    new Set(
+      latestStudentGrades
+        .filter(
+          (grade) =>
+            grade.isPassed &&
+            PASSING_GRADES.includes(grade.letterGrade)
+        )
+        .map((grade) => grade.courseId)
+    ),
+  [latestStudentGrades]
+);
+
+const availableAddClasses = useMemo(() => {
+  const contractedCourseIds = new Set(
+    activeKrs?.items.map((item) => item.courseId) || []
+  );
+
+  return classes.filter(
+    (cls) =>
+      !contractedCourseIds.has(cls.courseId) &&
+      !pendingAddCourseIds.includes(cls.courseId)
+  );
+}, [classes, activeKrs?.items, pendingAddCourseIds]);
+
+const availableDropItems = useMemo(
+  () =>
+    (activeKrs?.items || []).filter(
+      (item) => !pendingDropItemIds.includes(item.id)
+    ),
+  [activeKrs?.items, pendingDropItemIds]
+);
+
+const handleSubmitAddDrop = () => {
+  const targetId =
+    addDropType === 'add'
+      ? selectedAddClassId
+      : selectedDropItemId;
+
+  if (!targetId) {
+    warning(
+      'Mata Kuliah Belum Dipilih',
+      'Silakan pilih mata kuliah terlebih dahulu.'
+    );
+    return;
+  }
+
+  if (!addDropReason.trim()) {
+    warning(
+      'Alasan Belum Diisi',
+      'Tuliskan alasan pengajuan Add & Drop.'
+    );
+    return;
+  }
+
+  try {
+    submitAddDropRequest(
+      addDropType,
+      targetId,
+      addDropReason.trim()
+    );
+
+    success(
+      'Permintaan Berhasil Dikirim',
+      'Permintaan Add & Drop telah dikirim kepada Dosen PA untuk ditinjau.'
+    );
+
+    setSelectedAddClassId('');
+    setSelectedDropItemId('');
+    setAddDropReason('');
+  } catch (error) {
+    warning(
+      'Permintaan Gagal Dikirim',
+      error instanceof Error
+        ? error.message
+        : 'Terjadi kesalahan saat mengirim permintaan.'
+    );
+  }
+};
+
+  if (!activeStudent) return null;
 
   return (
     <div className="space-y-6">
@@ -160,7 +381,9 @@ export const StudyPlanPage: React.FC = () => {
         ]}
         actions={
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 hidden sm:inline">Status KRS:</span>
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              Status KRS:
+            </span>
             <StatusBadge status={activeStudent.krsStatus} />
           </div>
         }
@@ -181,19 +404,409 @@ export const StudyPlanPage: React.FC = () => {
             <AlertCircle className="w-4 h-4 text-amber-600" />
             <span>Catatan / Feedback dari Dosen Pembimbing Akademik:</span>
           </div>
-          <p className="text-amber-800 italic pl-6">"{activeKrs.advisorFeedback}"</p>
+          <p className="text-amber-800 italic pl-6">
+            "{activeKrs.advisorFeedback}"
+          </p>
         </div>
       )}
 
-      {/* Two Column Workspace: Left (Catalog) & Right (Selected Summary Panel) */}
+      {/* Add & Drop Mata Kuliah setelah KRS disetujui */}
+{isLocked && activeKrs && (
+  <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs space-y-5">
+    <div className="flex items-start gap-3">
+      <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+        <PlusCircle className="w-5 h-5" />
+      </div>
+
+      <div>
+        <h2 className="text-sm font-bold text-[#142B4A]">
+          Pengajuan Add & Drop Mata Kuliah
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">
+          KRS Anda sudah disetujui. Pengubahan mata kuliah hanya dapat
+          dilakukan melalui permintaan yang disetujui Dosen PA.
+        </p>
+      </div>
+    </div>
+
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <button
+        type="button"
+        onClick={() => setAddDropType('add')}
+        className={`p-3 rounded-xl border text-left transition-colors ${
+          addDropType === 'add'
+            ? 'border-blue-500 bg-blue-50'
+            : 'border-slate-200 hover:bg-slate-50'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <PlusCircle className="w-4 h-4 text-blue-600" />
+          <span className="text-xs font-bold text-slate-800">
+            Add Mata Kuliah
+          </span>
+        </div>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Mengajukan penambahan mata kuliah ke KRS.
+        </p>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setAddDropType('drop')}
+        className={`p-3 rounded-xl border text-left transition-colors ${
+          addDropType === 'drop'
+            ? 'border-red-500 bg-red-50'
+            : 'border-slate-200 hover:bg-slate-50'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <Trash2 className="w-4 h-4 text-red-600" />
+          <span className="text-xs font-bold text-slate-800">
+            Drop Mata Kuliah
+          </span>
+        </div>
+        <p className="text-[10px] text-slate-500 mt-1">
+          Mengajukan penghapusan mata kuliah dari KRS.
+        </p>
+      </button>
+    </div>
+
+    <div className="space-y-3">
+      
+<div>
+  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+    {addDropType === 'add'
+      ? 'Pilih mata kuliah dan kelas yang ingin ditambahkan'
+      : 'Pilih mata kuliah yang ingin di-drop'}
+  </label>
+
+  {addDropType === 'add' ? (
+    <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
+      {courses.map((course) => {
+        const courseClasses = classes.filter(
+          (cls) => cls.courseId === course.id
+        );
+
+        const prerequisiteStatus = checkPrerequisite(
+          course,
+          Array.from(passedCourseIdSet),
+          courses
+        );
+
+        const alreadyPassed = passedCourseIdSet.has(course.id);
+
+        const alreadyContracted = activeKrs?.items.some(
+          (item) => item.courseId === course.id
+        ) || false;
+
+        const pendingRequest = pendingAddCourseIds.includes(course.id);
+
+        return (
+          <div
+            key={course.id}
+            className="p-4 rounded-xl border border-slate-200 bg-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-bold">
+                    {course.code}
+                  </span>
+
+                  <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-[10px] font-bold">
+                    Semester {course.semester}
+                  </span>
+
+                  <span className="text-xs font-bold text-slate-700">
+                    {course.credits} SKS
+                  </span>
+                </div>
+
+                <h3 className="font-bold text-slate-900 text-sm mt-1">
+                  {course.name}
+                </h3>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mt-2">
+              {alreadyPassed && (
+                <span className="text-[10px] font-bold text-red-600">
+                  Sudah lulus berdasarkan nilai terbaru
+                </span>
+              )}
+
+              {!prerequisiteStatus.satisfied && (
+                <span className="text-[10px] font-bold text-red-600">
+                  Prasyarat belum terpenuhi: {prerequisiteStatus.missing.join(', ')}
+                </span>
+              )}
+
+              {alreadyContracted && (
+                <span className="text-[10px] font-bold text-amber-600">
+                  Sudah ada dalam KRS
+                </span>
+              )}
+
+              {pendingRequest && (
+                <span className="text-[10px] font-bold text-amber-600">
+                  Menunggu persetujuan Add
+                </span>
+              )}
+            </div>
+
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+              {courseClasses.length === 0 ? (
+                <p className="text-[11px] text-slate-400 italic">
+                  Belum ada kelas tersedia untuk mata kuliah ini.
+                </p>
+              ) : (
+                courseClasses.map((cls) => {
+                  const isFull = cls.enrolled >= cls.capacity;
+                  const isSelected = selectedAddClassId === cls.id;
+
+                  const cannotSelect =
+                    alreadyPassed ||
+                    !prerequisiteStatus.satisfied ||
+                    alreadyContracted ||
+                    pendingRequest ||
+                    isFull;
+
+                  return (
+                    <div
+                      key={cls.id}
+                      className={`p-3 rounded-lg border ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-slate-200 bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-bold text-slate-700">
+                            Paralel {cls.section}
+                          </span>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[10px] text-slate-600">
+                            <span>
+                              <Calendar className="w-3 h-3 inline mr-1 text-blue-600" />
+                              {cls.day}, {cls.startTime}-{cls.endTime}
+                            </span>
+
+                            <span>
+                              <MapPin className="w-3 h-3 inline mr-1" />
+                              {cls.room}
+                            </span>
+
+                            <span>
+                              <User className="w-3 h-3 inline mr-1" />
+                              {cls.lecturerName}
+                            </span>
+
+                            <span className={isFull ? 'text-red-600 font-bold' : ''}>
+                              Kapasitas: {cls.enrolled}/{cls.capacity}
+                              {isFull && ' (PENUH)'}
+                            </span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          disabled={!isSelected && cannotSelect}
+                          onClick={() =>
+                            setSelectedAddClassId(
+                              isSelected ? '' : cls.id
+                            )
+                          }
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0 ${
+                            isSelected
+                              ? 'bg-red-50 text-red-600 border border-red-200'
+                              : cannotSelect
+                              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                          }`}
+                        >
+                          {isSelected
+                            ? 'Batal Pilih'
+                            : cannotSelect
+                            ? 'Tidak Tersedia'
+                            : 'Pilih Kelas'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  ) : (
+    <select
+      value={selectedDropItemId}
+      onChange={(e) => setSelectedDropItemId(e.target.value)}
+      className="w-full p-3 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20"
+    >
+      <option value="">-- Pilih mata kuliah --</option>
+      {availableDropItems.map((item) => (
+        <option key={item.id} value={item.id}>
+          {item.courseCode} - {item.courseName} | Paralel {item.section} | {item.credits} SKS
+        </option>
+      ))}
+    </select>
+  )}
+
+  {addDropType === 'drop' && availableDropItems.length === 0 && (
+    <p className="text-[10px] text-amber-600 mt-2">
+      Tidak ada mata kuliah yang dapat di-drop saat ini.
+    </p>
+  )}
+
+  {addDropType === 'add' && selectedAddClassId && (
+    <p className="text-[10px] text-blue-600 font-medium mt-2">
+      Kelas sudah dipilih. Silakan isi alasan pengajuan.
+    </p>
+  )}
+</div>
+
+
+      <div>
+        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+          Alasan Pengajuan
+        </label>
+        <textarea
+          value={addDropReason}
+          onChange={(e) => setAddDropReason(e.target.value)}
+          rows={3}
+          placeholder="Jelaskan alasan penambahan atau penghapusan mata kuliah..."
+          className="w-full p-3 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20"
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleSubmitAddDrop}
+        disabled={
+          !addDropReason.trim() ||
+          (addDropType === 'add'
+            ? !selectedAddClassId
+            : !selectedDropItemId)
+        }
+        className={`w-full py-3 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+          addDropType === 'add'
+            ? 'bg-blue-600 hover:bg-blue-700'
+            : 'bg-red-600 hover:bg-red-700'
+        }`}
+      >
+        <Send className="w-4 h-4" />
+        Kirim Permintaan {addDropType === 'add' ? 'Add' : 'Drop'}
+        ke Dosen PA
+      </button>
+    </div>
+
+    <div className="border-t border-slate-100 pt-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <ClipboardList className="w-4 h-4 text-slate-600" />
+        <h3 className="text-xs font-bold text-slate-800">
+          Riwayat Permintaan Add & Drop
+        </h3>
+      </div>
+
+      {studentAddDropRequests.length === 0 ? (
+        <div className="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center">
+          <p className="text-xs text-slate-500">
+            Belum ada permintaan Add & Drop.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {studentAddDropRequests.map((request) => (
+            <div
+              key={request.id}
+              className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-1 rounded-md ${
+                      request.type === 'add'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-red-100 text-red-700'
+                    }`}
+                  >
+                    {request.type === 'add' ? 'ADD' : 'DROP'}
+                  </span>
+
+                  <p className="text-xs font-bold text-slate-800 mt-2">
+                    {request.courseItem.courseCode} -{' '}
+                    {request.courseItem.courseName}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Paralel {request.courseItem.section} ·{' '}
+                    {request.courseItem.credits} SKS
+                  </p>
+                </div>
+
+                <span
+                  className={`text-[10px] font-bold px-2 py-1 rounded-md whitespace-nowrap ${
+                    request.status === 'approved'
+                      ? 'bg-emerald-100 text-emerald-700'
+                      : request.status === 'rejected'
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {request.status === 'approved'
+                    ? 'Disetujui'
+                    : request.status === 'rejected'
+                    ? 'Ditolak'
+                    : 'Menunggu'}
+                </span>
+              </div>
+
+              <div className="text-[10px] text-slate-600">
+                <p>
+                  <strong>Alasan:</strong> {request.reason}
+                </p>
+                <p className="mt-1">
+                  <strong>Dikirim:</strong>{' '}
+                  {new Date(request.submittedAt).toLocaleString('id-ID')}
+                </p>
+              </div>
+
+              {request.feedback && (
+                <div className="p-2 rounded-lg bg-white border border-slate-200 text-[10px] text-slate-700">
+                  <strong>Tanggapan Dosen PA:</strong>
+                  <p className="mt-1">{request.feedback}</p>
+                </div>
+              )}
+
+              {request.reviewerName && (
+                <p className="text-[10px] text-slate-500">
+                  Ditinjau oleh: {request.reviewerName}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+      {/* Two Column Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Course Catalog (7 cols) */}
+        {/* Left Column: Course Catalog */}
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <h2 className="text-sm font-bold text-[#142B4A]">Katalog Kelas Perkuliahan</h2>
-                <p className="text-xs text-slate-500">Pilih mata kuliah & seksi yang sesuai dengan kurikulum Anda</p>
+                <h2 className="text-sm font-bold text-[#142B4A]">
+                  Katalog Kelas Perkuliahan
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Pilih mata kuliah & seksi yang sesuai dengan kurikulum Anda
+                </p>
               </div>
 
               {/* Filters */}
@@ -211,6 +824,7 @@ export const StudyPlanPage: React.FC = () => {
                   <option value="5">Semester 5 (Paket Aktif)</option>
                   <option value="6">Semester 6</option>
                   <option value="7">Semester 7</option>
+                  <option value="8">Semester 8</option>
                 </select>
               </div>
             </div>
@@ -229,122 +843,154 @@ export const StudyPlanPage: React.FC = () => {
 
             {/* Course List */}
             <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
-              {filteredClasses.length === 0 ? (
+              {filteredCourses.length === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">
                   Tidak ada mata kuliah yang cocok dengan kata kunci pencarian.
                 </div>
               ) : (
-                filteredClasses.map((cls) => {
-                  const isSelected = selectedClassIds.includes(cls.id);
-                  const course = courses.find((c) => c.id === cls.courseId);
-                  const prereqStatus = course
-                    ? checkPrerequisite(course, passedCourseIds, courses)
-                    : { satisfied: true, missing: [] };
-                  const capacityStatus = validateClassCapacity(cls);
-                  const isRepetition = passedCourseIds.includes(cls.courseId);
+                filteredCourses.map((course) => {
+                  const courseClasses = classes.filter(
+                    (cls) => cls.courseId === course.id
+                  );
+
+                  const prereqStatus = checkPrerequisite(
+                    course,
+                    passedCourseIds,
+                    courses
+                  );
+
+                  const isRepetition = passedCourseIds.includes(course.id);
 
                   return (
                     <div
-                      key={cls.id}
-                      className={`p-4 rounded-xl border transition-all ${
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50/40 shadow-xs'
-                          : 'border-slate-200/80 bg-white hover:border-slate-300'
-                      }`}
+                      key={course.id}
+                      className="p-4 rounded-xl border border-slate-200/80 bg-white"
                     >
+                      {/* Course Information */}
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-bold">
-                              {cls.courseCode}
+                              {course.code}
                             </span>
+
                             <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-[10px] font-bold">
-                              Seksi {cls.section}
+                              Semester {course.semester}
                             </span>
+
                             <span className="text-xs font-bold text-slate-700">
-                              {cls.credits} SKS
+                              {course.credits} SKS
                             </span>
-                            {course && (
-                              <span className="text-[10px] text-slate-500">
-                                Sem {course.semester} • {course.category}
-                              </span>
-                            )}
+
+                            <span className="text-[10px] text-slate-500">
+                              {course.category}
+                            </span>
                           </div>
-                          <h3 className="font-bold text-slate-900 text-sm mt-1">{cls.courseName}</h3>
-                        </div>
 
-                        {/* Action Button */}
-                        <button
-                          disabled={isLocked}
-                          onClick={() => handleToggleClass(cls)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1 ${
-                            isLocked
-                              ? 'opacity-40 cursor-not-allowed bg-slate-200 text-slate-500'
-                              : isSelected
-                              ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-xs'
-                          }`}
-                        >
-                          {isSelected ? (
-                            <>
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Hapus
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="w-3.5 h-3.5" />
-                              Pilih Kelas
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Timetable, Room, Lecturer Info */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-600">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                          <span>
-                            {cls.day}, {cls.startTime}-{cls.endTime}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{cls.room}</span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{cls.lecturerName}</span>
+                          <h3 className="font-bold text-slate-900 text-sm mt-1">
+                            {course.name}
+                          </h3>
                         </div>
                       </div>
 
-                      {/* Capacity & Badges */}
-                      <div className="flex items-center justify-between gap-2 mt-2.5 pt-2 border-t border-slate-100/60 text-[11px]">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-semibold ${
-                              capacityStatus.isFull ? 'text-red-600 font-bold' : 'text-slate-600'
-                            }`}
-                          >
-                            Kapasitas: {cls.enrolled} / {cls.capacity} Mahasiswa
-                          </span>
-                          {capacityStatus.isFull && (
-                            <span className="px-1.5 py-0.5 rounded-sm bg-red-100 text-red-700 font-bold text-[9px]">
-                              KELAS PENUH
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Prerequisite feedback on card */}
+                      {/* Prerequisite and Repetition Information */}
+                      <div className="flex items-center gap-2 flex-wrap mt-2">
                         {!prereqStatus.satisfied && (
-                          <div className="flex items-center gap-1 text-red-600 text-[10px] font-bold">
-                            <AlertTriangle className="w-3 h-3" />
-                            <span>Butuh Prasyarat: {prereqStatus.missing.join(', ')}</span>
-                          </div>
+                          <span className="text-red-600 text-[10px] font-bold">
+                            <AlertTriangle className="w-3 h-3 inline mr-1" />
+                            Butuh Prasyarat: {prereqStatus.missing.join(', ')}
+                          </span>
                         )}
+
                         {isRepetition && (
                           <span className="text-amber-600 text-[10px] font-medium">
-                            (Pernah diambil / perbaikan)
+                            Pernah diambil / perbaikan
                           </span>
+                        )}
+                      </div>
+
+                      {/* Available Classes */}
+                      <div className="mt-3 pt-3 border-t border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-600 mb-2">
+                          Kelas yang tersedia:
+                        </p>
+
+                        {courseClasses.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 italic">
+                            Belum ada kelas tersedia untuk mata kuliah ini.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {courseClasses.map((cls) => {
+                              const isSelected = selectedClassIds.includes(cls.id);
+                              const capacityStatus = validateClassCapacity(cls);
+
+                              return (
+                                <div
+                                  key={cls.id}
+                                  className={`p-3 rounded-lg border ${
+                                    isSelected
+                                      ? 'border-blue-600 bg-blue-50/40'
+                                      : 'border-slate-200 bg-slate-50'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <span className="text-[11px] font-bold text-slate-700">
+                                        Paralel {cls.section}
+                                      </span>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 text-[10px] text-slate-600">
+                                        <span>
+                                          <Calendar className="w-3 h-3 inline mr-1 text-blue-600" />
+                                          {cls.day}, {cls.startTime}-{cls.endTime}
+                                        </span>
+
+                                        <span>
+                                          <MapPin className="w-3 h-3 inline mr-1" />
+                                          {cls.room}
+                                        </span>
+
+                                        <span>
+                                          <User className="w-3 h-3 inline mr-1" />
+                                          {cls.lecturerName}
+                                        </span>
+
+                                        <span
+                                          className={
+                                            capacityStatus.isFull
+                                              ? 'text-red-600 font-bold'
+                                              : ''
+                                          }
+                                        >
+                                          Kapasitas: {cls.enrolled}/{cls.capacity}
+                                          {capacityStatus.isFull && ' (PENUH)'}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <button
+                                      disabled={
+                                        isLocked ||
+                                        (!isSelected && capacityStatus.isFull)
+                                      }
+                                      onClick={() => handleToggleClass(cls)}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold shrink-0 ${
+                                        isLocked ||
+                                        (!isSelected && capacityStatus.isFull)
+                                          ? 'opacity-40 cursor-not-allowed bg-slate-200 text-slate-500'
+                                          : isSelected
+                                          ? 'bg-red-50 text-red-600 border border-red-200'
+                                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                                      }`}
+                                    >
+                                      {isSelected ? 'Hapus' : 'Pilih Kelas'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -355,14 +1001,19 @@ export const StudyPlanPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Column: Study Plan Summary Panel (5 cols) */}
+        {/* Right Column: Study Plan Summary Panel */}
         <div className="lg:col-span-5 space-y-5 sticky top-20">
           <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#142B4A]">Ringkasan Rencana Studi</h2>
-                <p className="text-xs text-slate-500">Mata kuliah yang Anda pilih untuk diajukan</p>
+                <h2 className="text-sm font-bold text-[#142B4A]">
+                  Ringkasan Rencana Studi
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Mata kuliah yang Anda pilih untuk diajukan
+                </p>
               </div>
+
               <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">
                 {selectedClasses.length} Mata Kuliah
               </span>
@@ -371,38 +1022,46 @@ export const StudyPlanPage: React.FC = () => {
             {/* SKS Limit Gauge */}
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60 space-y-2">
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-slate-700">Total Beban SKS:</span>
+                <span className="font-semibold text-slate-700">
+                  Total Beban SKS:
+                </span>
+
                 <span
                   className={`text-sm font-black ${
-                    totalSelectedCredits > activeStudent.maxCreditLimit
+                    totalSelectedCredits > maxCreditLimit
                       ? 'text-red-600'
                       : 'text-blue-600'
                   }`}
                 >
-                  {totalSelectedCredits} / {activeStudent.maxCreditLimit} SKS
+                  {totalSelectedCredits} / {maxCreditLimit} SKS
                 </span>
               </div>
+
               {/* Progress bar */}
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    totalSelectedCredits > activeStudent.maxCreditLimit
+                    totalSelectedCredits > maxCreditLimit
                       ? 'bg-red-600'
-                      : totalSelectedCredits >= activeStudent.maxCreditLimit * 0.85
+                      : totalSelectedCredits >= maxCreditLimit * 0.85
                       ? 'bg-blue-600'
                       : 'bg-emerald-500'
                   }`}
                   style={{
                     width: `${Math.min(
                       100,
-                      (totalSelectedCredits / activeStudent.maxCreditLimit) * 100
+                      (totalSelectedCredits / maxCreditLimit) * 100
                     )}%`,
                   }}
                 ></div>
               </div>
+
               <p className="text-[10px] text-slate-500 text-right">
-                Batas maksimal berdasarkan IPS lalu ({activeStudent.lastSemesterGpa.toFixed(2)}):{' '}
-                <strong>{activeStudent.maxCreditLimit} SKS</strong>
+                Batas maksimal berdasarkan IPK kumulatif (
+                {cumulativeGpa !== null
+                  ? cumulativeGpa.toFixed(2)
+                  : 'Belum tersedia'}
+                ): <strong>{maxCreditLimit} SKS</strong>
               </p>
             </div>
 
@@ -424,8 +1083,11 @@ export const StudyPlanPage: React.FC = () => {
                 <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-red-900">
                     <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                    <span>Ditemukan {validationResult.errors.length} Masalah Validasi:</span>
+                    <span>
+                      Ditemukan {validationResult.errors.length} Masalah Validasi:
+                    </span>
                   </div>
+
                   <ul className="list-disc pl-5 space-y-1 text-[11px]">
                     {validationResult.errors.map((err, i) => (
                       <li key={i}>{err}</li>
@@ -440,6 +1102,7 @@ export const StudyPlanPage: React.FC = () => {
                     <Info className="w-3.5 h-3.5 text-amber-600" />
                     <span>Catatan Peringatan:</span>
                   </div>
+
                   <ul className="list-disc pl-5 space-y-0.5 text-[11px]">
                     {validationResult.warnings.map((warn, i) => (
                       <li key={i}>{warn}</li>
@@ -454,6 +1117,7 @@ export const StudyPlanPage: React.FC = () => {
               <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Daftar Mata Kuliah Terpilih
               </h3>
+
               {selectedClasses.length === 0 ? (
                 <div className="p-4 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                   Belum ada kelas yang dipilih. Silakan pilih dari katalog di sebelah kiri.
@@ -466,12 +1130,16 @@ export const StudyPlanPage: React.FC = () => {
                       className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs"
                     >
                       <div className="overflow-hidden">
-                        <p className="font-bold text-slate-800 truncate">{cls.courseName}</p>
+                        <p className="font-bold text-slate-800 truncate">
+                          {cls.courseName}
+                        </p>
+
                         <p className="text-[10px] text-slate-500 font-mono">
-                          {cls.courseCode} (Seksi {cls.section}) • {cls.credits} SKS • {cls.day}{' '}
+                          {cls.courseCode} (Paralel {cls.section}) • {cls.credits} SKS • {cls.day}{' '}
                           {cls.startTime}
                         </p>
                       </div>
+
                       <button
                         disabled={isLocked}
                         onClick={() => handleRemoveClass(cls.id)}
@@ -491,6 +1159,7 @@ export const StudyPlanPage: React.FC = () => {
               <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                 Catatan Mahasiswa untuk Dosen PA
               </label>
+
               <textarea
                 disabled={isLocked}
                 value={studentNotes}
@@ -546,23 +1215,36 @@ export const StudyPlanPage: React.FC = () => {
             <h3 className="text-base font-bold text-center text-slate-900">
               Kirimkan Rencana Studi ke Dosen PA?
             </h3>
+
             <p className="text-xs text-slate-500 text-center mt-1 leading-relaxed">
-              Anda akan mengirimkan <strong>{selectedClasses.length} mata kuliah ({totalSelectedCredits} SKS)</strong>{' '}
-              ke Dosen Pembina Akademik Anda (<strong>{activeStudent.academicAdvisorName}</strong>).
+              Anda akan mengirimkan{' '}
+              <strong>
+                {selectedClasses.length} mata kuliah ({totalSelectedCredits} SKS)
+              </strong>{' '}
+              ke Dosen Pembina Akademik Anda (
+              <strong>{activeStudent.academicAdvisorName}</strong>).
             </p>
 
             <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
               <div className="flex justify-between text-slate-600">
                 <span>Nama Mahasiswa:</span>
-                <span className="font-semibold text-slate-800">{activeStudent.name}</span>
+                <span className="font-semibold text-slate-800">
+                  {activeStudent.name}
+                </span>
               </div>
+
               <div className="flex justify-between text-slate-600">
                 <span>NIM:</span>
-                <span className="font-mono text-slate-800">{activeStudent.nim}</span>
+                <span className="font-mono text-slate-800">
+                  {activeStudent.nim}
+                </span>
               </div>
+
               <div className="flex justify-between text-slate-600">
                 <span>Total SKS Terpilih:</span>
-                <span className="font-bold text-blue-600">{totalSelectedCredits} SKS</span>
+                <span className="font-bold text-blue-600">
+                  {totalSelectedCredits} SKS
+                </span>
               </div>
             </div>
 
@@ -573,9 +1255,11 @@ export const StudyPlanPage: React.FC = () => {
               >
                 Batal
               </button>
+
               <button
+                disabled={!validationResult.isValid}
                 onClick={handleConfirmSubmit}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-xs"
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Konfirmasi & Kirim
               </button>

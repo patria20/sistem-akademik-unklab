@@ -1,14 +1,20 @@
+﻿
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User, UserRole } from '../types/academic';
 import { MOCK_USERS } from '../data/mockAcademicData';
+
+export interface LoginResult {
+  success: boolean;
+  user?: User;
+  error?: string;
+}
 
 interface AuthContextType {
   user: User | null;
   role: UserRole;
   isAuthenticated: boolean;
-  login: (email: string, role?: UserRole) => boolean;
+  login: (email: string, password: string) => LoginResult;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
   demoAccounts: { role: UserRole; label: string; email: string; name: string }[];
   sessionStartedAt: number | null;
 }
@@ -18,11 +24,38 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = 'siam_unklab_auth_user';
 const SESSION_TIMESTAMP_KEY = 'siam_unklab_session_time';
 
+const STUDENT_EMAIL_REGEX = /^[a-z0-9._-]+@student\.unklab\.ac\.id$/i;
+const LECTURER_EMAIL_REGEX = /^[a-z0-9._-]+@unklab\.ac\.id$/i;
+
+export const detectRoleFromUnklabEmail = (email: string): UserRole | null => {
+  const trimmed = email.trim().toLowerCase();
+
+  if (STUDENT_EMAIL_REGEX.test(trimmed)) return 'student';
+
+  if (LECTURER_EMAIL_REGEX.test(trimmed)) {
+    const localPart = trimmed.split('@')[0];
+    if (localPart === 'admin') return null;
+    return 'lecturer';
+  }
+
+  return null;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+
+      const parsed = JSON.parse(saved) as User;
+
+      if (parsed?.role !== 'student' && parsed?.role !== 'lecturer') {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(SESSION_TIMESTAMP_KEY);
+        return null;
+      }
+
+      return parsed;
     } catch {
       return null;
     }
@@ -40,7 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+
       const now = Date.now();
+
       if (!sessionStartedAt) {
         setSessionStartedAt(now);
         localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
@@ -52,26 +87,75 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [user, sessionStartedAt]);
 
-  const login = useCallback((email: string, role?: UserRole): boolean => {
+  const login = useCallback((email: string, password: string): LoginResult => {
     const trimmedEmail = email.trim().toLowerCase();
-    const found = MOCK_USERS.find(
+
+    if (!trimmedEmail || !password.trim()) {
+      return {
+        success: false,
+        error: 'Mohon isi alamat email UNKLAB dan kata sandi Anda.',
+      };
+    }
+
+    const demoCredentials = [
+      {
+        email: '12410619@student.unklab.ac.id',
+        password: 'unklab2026',
+      },
+      {
+        email: 'dosen@unklab.ac.id',
+        password: 'unklab2026',
+      },
+    ];
+
+    const matchedDemo = demoCredentials.find(
+      (account) => account.email === trimmedEmail
+    );
+
+    if (!matchedDemo) {
+      return {
+        success: false,
+        error: 'Akun tidak terdaftar. Gunakan salah satu dari dua akun demo SIAM-UNKLAB.',
+      };
+    }
+
+    if (password !== matchedDemo.password) {
+      return {
+        success: false,
+        error: 'Kata sandi yang Anda masukkan salah.',
+      };
+    }
+
+    const detectedRole = detectRoleFromUnklabEmail(trimmedEmail);
+
+    if (!detectedRole) {
+      return {
+        success: false,
+        error:
+          'Format email tidak valid. Gunakan email UNKLAB: @student.unklab.ac.id (Mahasiswa) atau @unklab.ac.id (Dosen).',
+      };
+    }
+
+    const exactMatch = MOCK_USERS.find(
       (u) => u.email.toLowerCase() === trimmedEmail
     );
 
-    if (!found) {
-      return false;
+    if (!exactMatch) {
+      return {
+        success: false,
+        error: 'Data akun demo tidak ditemukan.',
+      };
     }
 
-    // Validasi role: jika role ditentukan, pastikan akun tersebut memiliki role yang cocok
-    if (role && found.role !== role) {
-      return false;
-    }
+    const loggedInUser = exactMatch;
 
-    setUser(found);
+    setUser(loggedInUser);
+
     const now = Date.now();
     setSessionStartedAt(now);
     localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
-    return true;
+
+    return { success: true, user: loggedInUser };
   }, []);
 
   const logout = useCallback(() => {
@@ -81,31 +165,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem(SESSION_TIMESTAMP_KEY);
   }, []);
 
-  const switchRole = useCallback((newRole: UserRole) => {
-    const targetUser = MOCK_USERS.find((u) => u.role === newRole);
-    if (targetUser) {
-      setUser(targetUser);
-    }
-  }, []);
-
   const demoAccounts = [
     {
       role: 'student' as UserRole,
-      label: 'Mahasiswa (David Wowor)',
-      email: 'mahasiswa@unklab.ac.id',
-      name: 'David Wowor (105022110001)',
+      label: 'Mahasiswa (Syalom Mauren Angginaloy)',
+      email: '12410619@student.unklab.ac.id',
+      name: 'Syalom Mauren Angginaloy (12410168)',
     },
     {
       role: 'lecturer' as UserRole,
       label: 'Dosen PA (Semmy W. Taju, S.Kom., M.S., Ph.D.)',
       email: 'dosen@unklab.ac.id',
       name: 'Semmy W. Taju, S.Kom., M.S., Ph.D. (0914097501)',
-    },
-    {
-      role: 'admin' as UserRole,
-      label: 'Admin Akademik (Semuel Mewengkang)',
-      email: 'admin@unklab.ac.id',
-      name: 'Semuel Mewengkang, S.Kom.',
     },
   ];
 
@@ -117,7 +188,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         login,
         logout,
-        switchRole,
         demoAccounts,
         sessionStartedAt,
       }}
@@ -129,8 +199,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 };

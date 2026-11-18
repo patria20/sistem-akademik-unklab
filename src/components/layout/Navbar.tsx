@@ -9,15 +9,11 @@ import {
   Menu,
   GraduationCap,
   UserCheck,
-  Shield,
   LogOut,
   ChevronDown,
-  CheckCircle2,
   Clock,
-  Sparkles,
   ExternalLink,
   AlertTriangle,
-  X,
 } from 'lucide-react';
 import type { UserRole } from '../../types/academic';
 
@@ -26,26 +22,16 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
-  const { user, role, switchRole, logout } = useAuth();
-  const { notifications, markNotificationAsRead, lecturers } = useAcademic();
-  const { info, success } = useToast();
+  const { user, role, logout } = useAuth();
+  const { notifications, markNotificationAsRead } = useAcademic();
+  const { info } = useToast();
   const navigate = useNavigate();
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-
-  const handleRoleSelect = (newRole: UserRole) => {
-    switchRole(newRole);
-    setShowRoleSwitcher(false);
-    success('Peran Dialihkan', `Anda kini melihat sistem sebagai ${newRole.toUpperCase()}.`);
-    if (newRole === 'student') navigate('/student/dashboard');
-    else if (newRole === 'lecturer') navigate('/lecturer/dashboard');
-    else if (newRole === 'admin') navigate('/admin/dashboard');
-  };
 
   const handleConfirmLogout = () => {
     logout();
@@ -69,13 +55,6 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
             <UserCheck className="w-3.5 h-3.5" />
             Dosen PA
-          </span>
-        );
-      case 'admin':
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 border border-purple-200">
-            <Shield className="w-3.5 h-3.5" />
-            Admin Akademik
           </span>
         );
     }
@@ -108,79 +87,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
 
         {/* Right Side: Role Badge, Notifications & Profile */}
         <div className="flex items-center gap-2 sm:gap-4">
-          {/* Role Switcher Pill */}
-          <div className="relative">
-            <button
-              onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-              className="flex items-center gap-2 p-1.5 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer text-xs font-semibold text-slate-700"
-              title="Ganti Peran Demonstrasi"
-            >
-              {getRoleBadge(role)}
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 hidden sm:block" />
-            </button>
-
-            {/* Role Switcher Dropdown */}
-            {showRoleSwitcher && (
-              <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-50 animate-in fade-in slide-in-from-top-2">
-                <div className="px-3 py-2 border-b border-slate-100">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Ganti Peran Demonstrasi (1-Klik)
-                  </p>
-                </div>
-                <div className="p-1 space-y-1">
-                  <button
-                    onClick={() => handleRoleSelect('student')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-xl text-left transition-colors ${
-                      role === 'student' ? 'bg-blue-50 text-blue-700 font-bold' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <GraduationCap className="w-4 h-4 text-blue-600" />
-                    <div>
-                      <p>Mahasiswa (David Wowor)</p>
-                      <p className="text-[10px] text-slate-400">NIM: 105022110001</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleRoleSelect('lecturer')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-xl text-left transition-colors ${
-                      role === 'lecturer'
-                        ? 'bg-emerald-50 text-emerald-700 font-bold'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      {lecturers.length > 0 ? (
-                        <>
-                          <p>Dosen PA ({lecturers[0].name})</p>
-                          <p className="text-[10px] text-slate-400">NIDN: {lecturers[0].nidn}</p>
-                        </>
-                      ) : (
-                        <>
-                          <p>Dosen PA</p>
-                          <p className="text-[10px] text-slate-400">NIDN: -</p>
-                        </>
-                      )}
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleRoleSelect('admin')}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-xl text-left transition-colors ${
-                      role === 'admin'
-                        ? 'bg-purple-50 text-purple-700 font-bold'
-                        : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <Shield className="w-4 h-4 text-purple-600" />
-                    <div>
-                      <p>Admin Akademik (Semuel M.)</p>
-                      <p className="text-[10px] text-slate-400">Biro Administrasi Akademik</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Active Role Badge */}
+          <div className="hidden sm:block">{getRoleBadge(role)}</div>
 
           {/* Notifications Dropdown */}
           <div className="relative">

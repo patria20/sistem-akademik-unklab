@@ -1,4 +1,4 @@
-# TESTING REPORT & QUALITY ASSURANCE — SIAM-UNKLAB
+﻿# TESTING REPORT & QUALITY ASSURANCE â€” SIAM-UNKLAB
 **Laporan Eksekusi Pengujian Otomatis, Integritas Tipe, dan Alur Bisnis Nyata**
 
 *Tanggal Pengujian: 10 November 2026*
@@ -27,7 +27,7 @@ Rincian eksekusi bundler:
 
 | Test Case ID | Skenario Pengujian | Langkah Pengujian | Ekspektasi Hasil | Hasil Aktual | Status |
 |---|---|---|---|---|---|
-| **TC-AUTH-01** | Login Berhasil Mahasiswa | Klik tombol demo Mahasiswa lalu klik Masuk | Dialihkan ke `/student/dashboard` dengan salam personal nama mahasiswa | Masuk ke dashboard dengan data David Wowor dan toast sukses | **PASS** |
+| **TC-AUTH-01** | Login Berhasil Mahasiswa | Klik tombol demo Mahasiswa lalu klik Masuk | Dialihkan ke `/student/dashboard` dengan salam personal nama mahasiswa | Masuk ke dashboard dengan data Syalom Mauren Angginaloy dan toast sukses | **PASS** |
 | **TC-AUTH-02** | Login Gagal Email Salah | Masukkan email sembarang yang tidak terdaftar | Form menolak dan memunculkan notifikasi bahaya | Alert inline dan toast bahaya muncul | **PASS** |
 | **TC-AUTH-03** | Logout Terkonfirmasi | Klik keluar akun, pilih "Ya, Keluar" di modal | Sesi terhapus, diarahkan kembali ke beranda publik `/` | Sesi terhapus bersih dan toast info tampil | **PASS** |
 | **TC-AUTH-04** | Proteksi Rute Ilegal | Akses langsung `/admin/reports` saat login sebagai mahasiswa | Ditolak oleh `RoleRouteGuard` dan dialihkan ke `/unauthorized` | Dialihkan ke halaman `/unauthorized` | **PASS** |

@@ -1,7 +1,13 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
-import { calculateQualityPoints } from '../../utils/gpaCalculator';
+import { AcademicHistoryPage } from './AcademicHistoryPage';
+import {
+  calculateQualityPoints,
+  isOfficialGrade,
+  getLatestOfficialAttempts,
+  PASSING_GRADES,
+} from '../../utils/gpaCalculator';
 import {
   Printer,
   Award,
@@ -14,15 +20,23 @@ import {
   UserCheck,
   TrendingUp,
   FileCheck2,
-  Clock,
   AlertTriangle,
 } from 'lucide-react';
 
-export const GradesPage: React.FC = () => {
-  const { activeStudent, grades, lecturers, activeLecturer } = useAcademic();
+type AcademicTab = 'transcript' | 'khs' | 'history';
+
+interface GradesPageProps {
+  initialTab?: AcademicTab;
+}
+
+export const GradesPage: React.FC<GradesPageProps> = ({
+  initialTab = 'transcript',
+}) => {
+  const { activeStudent, grades, lecturers } = useAcademic();
+  const [activeTab, setActiveTab] = useState<AcademicTab>(initialTab);
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
-  // Guard clause: jika data mahasiswa tidak ditemukan, tampilkan pesan aman dan jangan render tabel
+  // Guard clause: jika data mahasiswa tidak ditemukan, tampilkan pesan aman
   if (!activeStudent) {
     return (
       <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-xs text-center">
@@ -37,61 +51,107 @@ export const GradesPage: React.FC = () => {
     );
   }
 
-  // Ambil data dosen pembimbing dari daftar lecturers untuk NIDN yang akurat (tidak ada hardcode)
+  // Dosen pembimbing dan Dekan dinamis (tanpa hardcode)
   const advisor = lecturers.find((l) => l.id === activeStudent.academicAdvisorId);
   const dean = lecturers.find((l) => l.title?.includes('Dekan'));
 
-  // Filter nilai secara ketat hanya untuk mahasiswa yang login (studentId === activeStudent.id)
-  // sehingga mahasiswa tidak mungkin melihat nilai mahasiswa lain
+  // Filter nilai ketat hanya untuk mahasiswa yang sedang aktif login
   const studentGrades = useMemo(() => {
     return grades.filter((g) => g.studentId === activeStudent.id);
-  }, [grades, activeStudent]);
+  }, [grades, activeStudent.id]);
 
-  // Available semesters including active semester 5
+  const officialGrades = useMemo(() => {
+    return studentGrades.filter(isOfficialGrade);
+  }, [studentGrades]);
+
   const semesters = [1, 2, 3, 4, 5];
 
+  const handleTabChange = (tab: AcademicTab) => {
+    setActiveTab(tab);
+    if (tab === 'transcript') {
+      setSelectedSemester('all');
+    }
+    if (tab === 'khs') {
+      setSelectedSemester(String(activeStudent.currentSemester || 5));
+    }
+  };
+
   const filteredGrades = useMemo(() => {
-    if (selectedSemester === 'all') return studentGrades;
-    return studentGrades.filter((g) => g.semester.toString() === selectedSemester);
-  }, [studentGrades, selectedSemester]);
-
-  const totalCredits = useMemo(() => {
-    return filteredGrades.reduce((sum, g) => sum + g.credits, 0);
-  }, [filteredGrades]);
-
-  const totalPassedCredits = useMemo(() => {
-    return filteredGrades.filter((g) => g.isPassed).reduce((sum, g) => sum + g.credits, 0);
-  }, [filteredGrades]);
-
-  const totalQualityPoints = useMemo(() => {
-    return filteredGrades.reduce(
-      (sum, g) => sum + calculateQualityPoints(g.letterGrade, g.credits),
-      0
+    if (selectedSemester === 'all') return officialGrades;
+    return officialGrades.filter(
+      (grade) => grade.semester.toString() === selectedSemester
     );
-  }, [filteredGrades]);
+  }, [officialGrades, selectedSemester]);
 
-  const computedGpa = useMemo(() => {
-    return totalCredits > 0 ? (totalQualityPoints / totalCredits).toFixed(2) : '0.00';
-  }, [totalCredits, totalQualityPoints]);
+  // UNKLAB: untuk Transkrip ('all'), percobaan resmi terbaru (latest attempt) yang dihitung
+  const countedAttemptIds = useMemo(() => {
+    return new Set(getLatestOfficialAttempts(officialGrades).map((g) => g.id));
+  }, [officialGrades]);
 
-  // Graduation honor predicate based on UNKLAB academic rules
+  const metricsGrades = useMemo(() => {
+    if (selectedSemester === 'all') {
+      return officialGrades.filter((g) => countedAttemptIds.has(g.id));
+    }
+    return filteredGrades;
+  }, [selectedSemester, officialGrades, countedAttemptIds, filteredGrades]);
+
+  const totalCredits = useMemo(
+    () => metricsGrades.reduce((sum, grade) => sum + grade.credits, 0),
+    [metricsGrades]
+  );
+
+  const totalPassedCredits = useMemo(
+    () =>
+      metricsGrades
+        .filter((grade) => grade.isPassed && PASSING_GRADES.includes(grade.letterGrade))
+        .reduce((sum, grade) => sum + grade.credits, 0),
+    [metricsGrades]
+  );
+
+  const totalQualityPoints = useMemo(
+    () =>
+      metricsGrades.reduce(
+        (sum, grade) => sum + calculateQualityPoints(grade.letterGrade, grade.credits),
+        0
+      ),
+    [metricsGrades]
+  );
+
+  const computedGpa = useMemo(
+    () => (totalCredits > 0 ? (totalQualityPoints / totalCredits).toFixed(2) : '0.00'),
+    [totalCredits, totalQualityPoints]
+  );
+
+  // Predikat kelulusan berdasarkan aturan akademik UNKLAB
   const academicHonor = useMemo(() => {
     const gpa = parseFloat(computedGpa);
-    if (gpa >= 3.85) return { title: 'Dengan Pujian Tertinggi (Summa Cum Laude)', color: 'text-amber-600 bg-amber-50 border-amber-200' };
+    if (gpa >= 3.85) return { title: 'Dengan Pujian Tertinggi (Summa Cum Laude)', color: 'text-amber-700 bg-amber-50 border-amber-200' };
     if (gpa >= 3.75) return { title: 'Dengan Pujian (Magna Cum Laude)', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' };
     if (gpa >= 3.50) return { title: 'Sangat Memuaskan', color: 'text-blue-700 bg-blue-50 border-blue-200' };
     if (gpa >= 3.00) return { title: 'Memuaskan', color: 'text-slate-700 bg-slate-50 border-slate-200' };
     return { title: 'Cukup', color: 'text-slate-600 bg-slate-50 border-slate-200' };
   }, [computedGpa]);
 
-  // Distribution count of letter grades
+  // Distribusi nilai huruf
   const gradeDistribution = useMemo(() => {
-    const map: Record<string, number> = { A: 0, 'A-': 0, 'B+': 0, B: 0, 'B-': 0, 'C+': 0, C: 0, D: 0, F: 0 };
-    filteredGrades.forEach((g) => {
-      if (map[g.letterGrade] !== undefined) {
-        map[g.letterGrade]++;
+    const map: Record<string, number> = {
+      A: 0,
+      'A-': 0,
+      'B+': 0,
+      B: 0,
+      'B-': 0,
+      'C+': 0,
+      C: 0,
+      D: 0,
+      F: 0,
+    };
+
+    filteredGrades.forEach((grade) => {
+      if (map[grade.letterGrade] !== undefined) {
+        map[grade.letterGrade]++;
       }
     });
+
     return map;
   }, [filteredGrades]);
 
@@ -99,322 +159,400 @@ export const GradesPage: React.FC = () => {
     window.print();
   };
 
+  const isTranscript = selectedSemester === 'all';
+
   return (
     <div className="space-y-6">
       {/* Screen-only Page Header */}
-      <div className="print:hidden">
-        <PageHeader
-          title="Transkrip Nilai & Kartu Hasil Studi (KHS)"
-          subtitle="Riwayat perolehan nilai akademik resmi dan transkrip kumulatif mahasiswa Universitas Klabat (UNKLAB)"
-          breadcrumbs={[
-            { label: 'Mahasiswa', path: '/student/dashboard' },
-            { label: 'Transkrip & KHS' },
-          ]}
-          actions={
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-xs transition-colors"
-            >
-              <Printer className="w-4 h-4" />
-              Cetak Transkrip / KHS Resmi
-            </button>
-          }
-        />
-      </div>
+      {activeTab !== 'history' && (
+        <div className="print:hidden">
+          <PageHeader
+            title="Transkrip Nilai & Kartu Hasil Studi (KHS)"
+            subtitle="Riwayat perolehan nilai akademik resmi dan transkrip kumulatif mahasiswa Universitas Klabat (UNKLAB)"
+            breadcrumbs={[
+              { label: 'Mahasiswa', path: '/student/dashboard' },
+              { label: 'Transkrip & KHS' },
+            ]}
+            actions={
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Cetak {isTranscript ? 'Transkrip Nilai' : `KHS Sem ${selectedSemester}`}
+              </button>
+            }
+          />
+        </div>
+      )}
 
-      {/* Printable Official Header (Shown when printed or in print preview) */}
-      <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
-        <div className="text-center space-y-1">
-          <p className="font-extrabold text-base tracking-wider uppercase text-slate-900">
-            UNIVERSITAS KLABAT
-          </p>
-          <p className="font-bold text-sm tracking-wide text-slate-800 uppercase">
-            FAKULTAS ILMU KOMPUTER — PROGRAM STUDI INFORMATIKA
-          </p>
-          <p className="text-[11px] text-slate-600">
-            Jl. Arnold Mononutu, Airmadidi Bawah, Kec. Airmadidi, Kab. Minahasa Utara, Sulawesi Utara 95371
-          </p>
-          <div className="h-0.5 bg-slate-900 w-full mt-2"></div>
-          <h2 className="text-sm font-black uppercase tracking-widest pt-3 text-slate-900">
-            {selectedSemester === 'all' ? 'TRANSKRIP AKADEMIK SEMENTARA' : `KARTU HASIL STUDI (KHS) — SEMESTER ${selectedSemester}`}
-          </h2>
-          <p className="text-[10px] text-slate-500 font-mono">
-            No. Dokumen: UNKLAB/FILKOM/TR-{new Date().getFullYear()}/{activeStudent.nim}
-          </p>
+      {/* Navigation Tabs (Screen only) */}
+      <div className="print:hidden">
+        <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => handleTabChange('transcript')}
+            aria-pressed={activeTab === 'transcript'}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'transcript'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:bg-white/60'
+            }`}
+          >
+            Transkrip Nilai Kumulatif
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('khs')}
+            aria-pressed={activeTab === 'khs'}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'khs'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:bg-white/60'
+            }`}
+          >
+            Kartu Hasil Studi (KHS)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('history')}
+            aria-pressed={activeTab === 'history'}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'history'
+                ? 'bg-white text-blue-700 shadow-xs'
+                : 'text-slate-600 hover:bg-white/60'
+            }`}
+          >
+            Riwayat Akademik
+          </button>
         </div>
       </div>
 
-      {/* Student Identity & Academic Advisor Verification Card */}
-      <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-          <div className="space-y-0.5">
-            <p className="text-slate-400 font-medium text-[11px]">Nama Mahasiswa</p>
-            <p className="font-bold text-slate-900 text-sm">{activeStudent.name}</p>
-            <span className="text-[11px] text-slate-500 font-mono">{activeStudent.nim}</span>
-          </div>
+      {/* Tab: Riwayat Akademik */}
+      {activeTab === 'history' && <AcademicHistoryPage />}
 
-          <div className="space-y-0.5">
-            <p className="text-slate-400 font-medium text-[11px]">Fakultas / Program Studi</p>
-            <p className="font-bold text-slate-900 text-sm">{activeStudent.programStudy}</p>
-            <span className="text-[11px] text-slate-500">{activeStudent.faculty}</span>
-          </div>
-
-          <div className="space-y-0.5">
-            <p className="text-slate-400 font-medium text-[11px]">Semester & Tahun Akademik</p>
-            <p className="font-bold text-slate-900 text-sm">Semester {activeStudent.currentSemester}</p>
-            <span className="text-[11px] text-slate-500">{activeStudent.academicYear}</span>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-slate-400 font-medium text-[11px]">Dosen Pembina Akademik (PA)</p>
-            <p className="font-bold text-blue-700 text-sm">{activeStudent.academicAdvisorName}</p>
-            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              <ShieldCheck className="w-3 h-3 text-blue-600" />
-              <span>Dosen Pembimbing IT 2024 Terverifikasi</span>
+      {/* Tab: Transkrip / KHS */}
+      {activeTab !== 'history' && (
+        <>
+          {/* Official Letterhead for Printing */}
+          <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6 text-center">
+            <h1 className="text-xl font-bold tracking-wider uppercase text-slate-900">
+              UNIVERSITAS KLABAT
+            </h1>
+            <p className="text-xs font-semibold text-slate-700">
+              FAKULTAS ILMU KOMPUTER • PROGRAM STUDI INFORMATIKA
+            </p>
+            <p className="text-[10px] text-slate-500">
+              Jl. Arnold Mononutu, Airmadidi Bawah, Kec. Airmadidi, Kab. Minahasa Utara, Sulawesi Utara 95371
+            </p>
+            <div className="mt-4 pt-2 border-t border-slate-400">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">
+                {isTranscript
+                  ? 'TRANSKRIP AKADEMIK SEMENTARA'
+                  : `KARTU HASIL STUDI (KHS) SEMESTER ${selectedSemester}`}
+              </h2>
             </div>
           </div>
-        </div>
 
-        {/* Advisor Verification Notice Banner */}
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-slate-700 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span className="text-[11px]">
-              Dosen Pembimbing Akademik resmi Program Studi Informatika 2024 terdaftar pada Biro Administrasi Akademik (BAA) UNKLAB.
-            </span>
+          {/* Student Profile Card */}
+          <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-xs relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-linear-to-bl from-blue-50/50 via-transparent to-transparent rounded-full -mr-20 -mt-20 pointer-events-none" />
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+              <div className="flex items-start sm:items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-xl shadow-md shrink-0">
+                  {activeStudent.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .slice(0, 2)
+                    .join('')}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-900">{activeStudent.name}</h2>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                      Terverifikasi BAA UNKLAB
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    NIM: {activeStudent.nim} • {activeStudent.programStudy} ({activeStudent.faculty})
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Tahun Akademik: {activeStudent.academicYear} • Semester Aktif: {activeStudent.currentSemester} • Status KRS: {activeStudent.krsStatus.toUpperCase()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Academic Overview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100 shrink-0">
+                <div className="text-center sm:text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                    {isTranscript ? 'IPK Kumulatif' : 'IPS Semester'}
+                  </span>
+                  <span className="text-lg font-extrabold text-blue-600">{computedGpa}</span>
+                </div>
+                <div className="text-center sm:text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">SKS Tempuh</span>
+                  <span className="text-lg font-extrabold text-slate-800">{totalCredits}</span>
+                </div>
+                <div className="text-center sm:text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">SKS Lulus</span>
+                  <span className="text-lg font-extrabold text-emerald-600">{totalPassedCredits}</span>
+                </div>
+                <div className="text-center sm:text-left">
+                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Mutu</span>
+                  <span className="text-lg font-extrabold text-purple-600">{totalQualityPoints.toFixed(1)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Academic Advisor Info */}
+            <div className="mt-5 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-slate-600">
+                <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  Dosen Pembina Akademik:{' '}
+                  <strong>{advisor?.name || activeStudent.academicAdvisorName}</strong>
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-slate-500">
+                NIDN: {advisor?.nidn || '-'} • FILKOM UNKLAB
+              </span>
+            </div>
           </div>
-          <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0">
-            NIDN: {advisor?.nidn || '-'} • FILKOM-IT
-          </span>
-        </div>
-      </div>
 
-      {/* Filter and Academic Metrics Banner */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
-            <Calendar className="w-4 h-4 text-blue-600" />
-            Tampilkan Periode:
-          </label>
-          <select
-            value={selectedSemester}
-            onChange={(e) => setSelectedSemester(e.target.value)}
-            className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 shadow-xs"
-          >
-            <option value="all">Semua Semester (Transkrip Lengkap)</option>
-            {semesters.map((sem) => (
-              <option key={sem} value={sem.toString()}>
-                Semester {sem} {sem === 5 ? '(Semester Aktif / Nilai Dosen)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
+          {/* Filter Bar and Honor Predicate (Screen only) */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 print:hidden">
+            <div className="flex items-center gap-3">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 shrink-0">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                Tampilkan Periode:
+              </label>
+              <select
+                value={selectedSemester}
+                onChange={(e) => setSelectedSemester(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 font-bold focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 shadow-xs"
+              >
+                <option value="all">Semua Semester (Transkrip Kumulatif Lengkap)</option>
+                {semesters.map((s) => (
+                  <option key={s} value={s.toString()}>
+                    Semester {s} {s === activeStudent.currentSemester ? '(Semester Berjalan)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        {/* Academic KPI metrics */}
-        <div className="flex items-center gap-3 text-xs bg-white p-3 rounded-2xl border border-slate-200 shadow-xs flex-wrap sm:flex-nowrap">
-          <div className="px-3">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total SKS</span>
-            <span className="text-slate-900 font-extrabold text-sm">{totalCredits} SKS</span>
+            {/* Predikat Kelulusan Badge */}
+            {isTranscript && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${academicHonor.color}`}>
+                <Award className="w-4 h-4 shrink-0" />
+                <span>Predikat Akademik: <strong>{academicHonor.title}</strong></span>
+              </div>
+            )}
           </div>
-          <div className="h-7 w-px bg-slate-200 hidden sm:block"></div>
-          <div className="px-3">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">SKS Lulus</span>
-            <span className="text-emerald-600 font-extrabold text-sm">{totalPassedCredits} SKS</span>
-          </div>
-          <div className="h-7 w-px bg-slate-200 hidden sm:block"></div>
-          <div className="px-3">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total Mutu</span>
-            <span className="text-slate-900 font-extrabold text-sm">{totalQualityPoints.toFixed(1)}</span>
-          </div>
-          <div className="h-7 w-px bg-slate-200 hidden sm:block"></div>
-          <div className="px-3 bg-blue-50/70 rounded-xl py-1">
-            <span className="text-blue-700 block text-[10px] font-bold uppercase">
-              {selectedSemester === 'all' ? 'IPK Kumulatif' : 'IPS Semester'}
-            </span>
-            <span className="text-blue-700 font-black text-base">{computedGpa}</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Academic Honor / Predicate Badge Banner */}
-      <div className={`p-4 rounded-2xl border ${academicHonor.color} text-xs font-semibold flex items-center justify-between shadow-xs print:hidden`}>
-        <div className="flex items-center gap-2.5">
-          <Award className="w-5 h-5 shrink-0" />
-          <div>
-            <span className="text-slate-500 font-normal">Predikat Kelulusan Akademik: </span>
-            <span className="font-extrabold text-sm">{academicHonor.title}</span>
-          </div>
-        </div>
-        <div className="text-[11px] text-slate-500 hidden md:block">
-          Data transkrip menggunakan data dummy kurikulum Informatika UNKLAB untuk simulasi & verifikasi.
-        </div>
-      </div>
+          {/* Official Grade Table */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:pb-2">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-blue-600" />
+                  {isTranscript
+                    ? 'Daftar Nilai Transkrip Lengkap'
+                    : `Daftar Mata Kuliah KHS Semester ${selectedSemester}`}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {isTranscript
+                    ? 'Menampilkan seluruh mata kuliah yang telah diselesaikan beserta nilai mutu dan status kelulusan resmi.'
+                    : `Menampilkan mata kuliah yang ditempuh pada Semester ${selectedSemester}.`}
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 self-start sm:self-auto shrink-0 print:hidden">
+                {filteredGrades.length} Mata Kuliah
+              </span>
+            </div>
 
-      {/* Grade Records Table */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden print:border print:border-slate-800 print:shadow-none">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 text-slate-600 font-bold uppercase text-[11px] bg-slate-50 print:bg-slate-100 print:border-b-2 print:border-slate-900">
-                <th className="py-3 px-4 w-10">No</th>
-                <th className="py-3 px-4">Kode MK</th>
-                <th className="py-3 px-4">Nama Mata Kuliah</th>
-                <th className="py-3 px-4 text-center">Semester</th>
-                <th className="py-3 px-4 text-center">SKS</th>
-                <th className="py-3 px-4 text-center">Nilai Angka</th>
-                <th className="py-3 px-4 text-center">Nilai Huruf</th>
-                <th className="py-3 px-4 text-center">Bobot Mutu</th>
-                <th className="py-3 px-4 text-center">Mutu (SKS x Bobot)</th>
-                <th className="py-3 px-4">Dosen Pengampu IT</th>
-                <th className="py-3 px-4 text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 print:divide-slate-300">
-              {filteredGrades.map((g, idx) => {
-                const mutu = calculateQualityPoints(g.letterGrade, g.credits);
-                const isRecentSemester5 = g.semester === 5;
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase text-[11px] bg-slate-50 print:bg-slate-100">
+                    <th className="py-3 px-4 text-center w-12">No</th>
+                    <th className="py-3 px-4">Kode MK</th>
+                    <th className="py-3 px-4">Nama Mata Kuliah</th>
+                    <th className="py-3 px-4 text-center">Semester</th>
+                    <th className="py-3 px-4 text-center">SKS</th>
+                    <th className="py-3 px-4 text-center">Nilai Angka</th>
+                    <th className="py-3 px-4 text-center">Nilai Huruf</th>
+                    <th className="py-3 px-4 text-center">Bobot</th>
+                    <th className="py-3 px-4 text-center">Total Mutu</th>
+                    <th className="py-3 px-4">Dosen Pengampu</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredGrades.length === 0 ? (
+                    <tr>
+                      <td colSpan={11} className="py-12 text-center text-slate-400">
+                        Tidak ada riwayat nilai untuk semester ini.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredGrades.map((g, idx) => {
+                      const mutu = calculateQualityPoints(g.letterGrade, g.credits);
+                      const isCounted = countedAttemptIds.has(g.id);
 
-                return (
-                  <tr
-                    key={g.id}
-                    className={`hover:bg-slate-50/70 transition-colors ${
-                      isRecentSemester5 ? 'bg-blue-50/30' : ''
-                    }`}
-                  >
-                    <td className="py-3 px-4 text-slate-400 font-medium">{idx + 1}</td>
-                    <td className="py-3 px-4 font-mono font-bold text-slate-700">{g.courseCode}</td>
-                    <td className="py-3 px-4 font-semibold text-slate-900">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{g.courseName}</span>
-                        {isRecentSemester5 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-blue-100 text-blue-800 print:hidden">
-                            <Sparkles className="w-2.5 h-2.5" />
-                            Input Dosen
-                          </span>
-                        )}
-                      </div>
+                      return (
+                        <tr
+                          key={g.id}
+                          className={`hover:bg-slate-50/70 transition-colors ${
+                            isTranscript && !isCounted ? 'bg-slate-50/40 text-slate-400' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-4 text-center text-slate-400">{idx + 1}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-blue-700">{g.courseCode}</td>
+                          <td className="py-3 px-4 font-bold text-slate-800">{g.courseName}</td>
+                          <td className="py-3 px-4 text-center text-slate-600">Sem {g.semester}</td>
+                          <td className="py-3 px-4 text-center font-bold text-slate-800">{g.credits}</td>
+                          <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
+                            {g.score !== undefined ? g.score : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-md font-bold text-xs ${
+                                ['A', 'A-'].includes(g.letterGrade)
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : ['B+', 'B', 'B-'].includes(g.letterGrade)
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : ['C+', 'C'].includes(g.letterGrade)
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {g.letterGrade}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-semibold text-slate-600">
+                            {g.gradePoint !== undefined ? g.gradePoint.toFixed(2) : '-'}
+                          </td>
+                          <td className="py-3 px-4 text-center font-mono font-bold text-slate-900">
+                            {mutu.toFixed(2)}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 text-[11px] font-medium">
+                            {g.lecturerName || '-'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                  g.isPassed
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {g.isPassed ? (
+                                  <>
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    LULUS
+                                  </>
+                                ) : (
+                                  'TIDAK LULUS'
+                                )}
+                              </span>
+                              {isTranscript && !isCounted && (
+                                <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                  Diulang
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800 print:bg-slate-100">
+                    <td colSpan={4} className="py-3 px-4 text-right">
+                      TOTAL:
                     </td>
-                    <td className="py-3 px-4 text-center text-slate-600 font-medium">Sem {g.semester}</td>
-                    <td className="py-3 px-4 text-center font-bold text-slate-800">{g.credits}</td>
-
-                    {/* Numeric Score */}
-                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
-                      {g.score !== undefined ? g.score : '-'}
+                    <td className="py-3 px-4 text-center font-extrabold text-blue-700">
+                      {totalCredits} SKS
                     </td>
-
-                    {/* Letter Grade */}
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-block w-8 py-0.5 rounded-md font-extrabold text-xs text-center border ${
-                          g.letterGrade.startsWith('A')
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : g.letterGrade.startsWith('B')
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : g.letterGrade.startsWith('C')
-                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                : 'bg-red-50 text-red-700 border-red-200'
-                        }`}
-                      >
-                        {g.letterGrade}
-                      </span>
+                    <td colSpan={3} className="py-3 px-4 text-right">
+                      TOTAL BOBOT MUTU:
                     </td>
-
-                    {/* Grade Point */}
-                    <td className="py-3 px-4 text-center font-semibold text-slate-600">
-                      {g.gradePoint !== undefined ? g.gradePoint.toFixed(2) : '-'}
+                    <td className="py-3 px-4 text-center font-mono font-extrabold text-blue-700">
+                      {totalQualityPoints.toFixed(2)}
                     </td>
-
-                    {/* Total Mutu (SKS x Bobot) */}
-                    <td className="py-3 px-4 text-center font-mono font-bold text-slate-900">
-                      {mutu.toFixed(2)}
-                    </td>
-
-                    {/* Lecturer Name */}
-                    <td className="py-3 px-4 text-slate-600 text-[11px] font-medium">
-                      {g.lecturerName || '-'}
-                    </td>
-
-                    {/* Pass Status */}
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          g.isPassed
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {g.isPassed ? (
-                          <>
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            LULUS
-                          </>
-                        ) : (
-                          'TIDAK LULUS'
-                        )}
-                      </span>
+                    <td colSpan={2} className="py-3 px-4 text-center font-extrabold text-slate-900">
+                      {isTranscript ? 'IPK' : 'IPS'}:{' '}
+                      <span className="text-blue-600 text-sm">{computedGpa}</span>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-            {/* Table Summary Footer */}
-            <tfoot>
-              <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800 print:bg-slate-100">
-                <td colSpan={4} className="py-3 px-4 text-right">TOTAL:</td>
-                <td className="py-3 px-4 text-center font-extrabold text-blue-700">{totalCredits} SKS</td>
-                <td colSpan={3} className="py-3 px-4 text-right">TOTAL BOBOT MUTU:</td>
-                <td className="py-3 px-4 text-center font-mono font-extrabold text-blue-700">{totalQualityPoints.toFixed(2)}</td>
-                <td colSpan={2} className="py-3 px-4 text-center font-extrabold text-slate-900">
-                  {selectedSemester === 'all' ? 'IPK' : 'IPS'}: <span className="text-blue-600 text-sm">{computedGpa}</span>
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-      {/* Grade Breakdown Visual Cards (Screen only) */}
-      <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs print:hidden space-y-3">
-        <h4 className="font-bold text-xs text-slate-800 flex items-center gap-2">
-          <BookOpen className="w-4 h-4 text-blue-600" />
-          Distribusi Perolehan Nilai Mutu Huruf
-        </h4>
-        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
-          {Object.entries(gradeDistribution).map(([letter, count]) => (
-            <div key={letter} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-center">
-              <span className="text-xs font-bold text-slate-500 block">Nilai {letter}</span>
-              <span className="text-lg font-extrabold text-slate-900 block mt-0.5">{count}</span>
-              <span className="text-[10px] text-slate-400">mata kuliah</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Official Signatures Section for Printed Transcripts */}
-      <div className="hidden print:block pt-8 text-xs text-slate-900">
-        <div className="flex justify-between items-start px-8">
-          <div className="text-center space-y-16">
-            <p>Mengetahui,</p>
-            <p className="font-medium">Dekan Fakultas Ilmu Komputer</p>
-            <div>
-              <p className="font-bold underline text-sm">{dean?.name || 'Stenly R. Pungus, S.Kom., MT., M.M., Ph.D.'}</p>
-              <p className="text-[10px] text-slate-600">NIDN: {dean?.nidn || '0912038401'}</p>
+                </tfoot>
+              </table>
             </div>
           </div>
 
-          <div className="text-center space-y-16">
-            <p>Airmadidi, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-            <p className="font-medium">Dosen Pembina Akademik IT 2024</p>
-            <div>
-              <p className="font-bold underline text-sm">{advisor?.name || activeStudent.academicAdvisorName}</p>
-              <p className="text-[10px] text-slate-600">NIDN: {advisor?.nidn || '-'}</p>
+          {/* Grade Breakdown Visual Cards (Screen only) */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs print:hidden space-y-3">
+            <h4 className="font-bold text-xs text-slate-800 flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              Distribusi Perolehan Nilai Huruf
+            </h4>
+            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
+              {Object.entries(gradeDistribution).map(([letter, count]) => (
+                <div key={letter} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-center">
+                  <span className="text-xs font-bold text-slate-500 block">Nilai {letter}</span>
+                  <span className="text-lg font-extrabold text-slate-900 block mt-0.5">{count}</span>
+                  <span className="text-[10px] text-slate-400">mata kuliah</span>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-        <div className="mt-8 pt-4 border-t border-slate-400 text-center text-[10px] text-slate-500">
-          Dokumen ini dicetak otomatis dari Sistem Informasi Akademik Mahasiswa Universitas Klabat (SIAM-UNKLAB).
-        </div>
-      </div>
+
+          {/* Official Signatures Section for Printed Documents */}
+          <div className="hidden print:block pt-8 text-xs text-slate-900">
+            <div className="flex justify-between items-start px-8">
+              <div className="text-center space-y-16">
+                <p>Mengetahui,</p>
+                <p className="font-medium">Dekan Fakultas Ilmu Komputer</p>
+                <div>
+                  <p className="font-bold underline text-sm">
+                    {dean?.name || 'Stenly R. Pungus, S.Kom., MT., M.M., Ph.D.'}
+                  </p>
+                  <p className="text-[10px] text-slate-600">NIDN: {dean?.nidn || '0912038401'}</p>
+                </div>
+              </div>
+
+              <div className="text-center space-y-16">
+                <p>
+                  Airmadidi,{' '}
+                  {new Date().toLocaleDateString('id-ID', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric',
+                  })}
+                </p>
+                <p className="font-medium">Dosen Pembina Akademik IT 2024</p>
+                <div>
+                  <p className="font-bold underline text-sm">
+                    {advisor?.name || activeStudent.academicAdvisorName}
+                  </p>
+                  <p className="text-[10px] text-slate-600">NIDN: {advisor?.nidn || '-'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-8 pt-4 border-t border-slate-400 text-center text-[10px] text-slate-500">
+              Dokumen ini dicetak otomatis dari Sistem Informasi Akademik Mahasiswa Universitas Klabat (SIAM-UNKLAB).
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
