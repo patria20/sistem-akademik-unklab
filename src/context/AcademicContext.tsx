@@ -69,7 +69,6 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setConsultations(AcademicService.getConsultations());
     setNotifications(AcademicService.getNotifications());
     setAuditLogs(AcademicService.getAuditLogs());
-    setGrades(AcademicService.getGradesByStudentId('std_01'));
   }, []);
 
   useEffect(() => {
@@ -77,6 +76,13 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [refreshData]);
 
   const activeStudent = students.find((s) => s.userId === user?.id) || students[0];
+  useEffect(() => {
+  if (activeStudent) {
+    setGrades(AcademicService.getGradesByStudentId(activeStudent.id));
+  } else {
+    setGrades([]);
+  }
+}, [activeStudent?.id]);
   const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
   const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
 

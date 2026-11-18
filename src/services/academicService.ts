@@ -139,7 +139,7 @@ export class AcademicService {
   // Grades
   static getGradesByStudentId(studentId: string): GradeRecord[] {
     const grades = getStoredItem<GradeRecord[]>(STORAGE_KEYS.GRADES, MOCK_GRADES_DAVID);
-    return grades.filter((g) => g.studentId === studentId || studentId === 'std_01');
+    return grades.filter((g) => g.studentId === studentId);
   }
 
   // Study Plans (KRS)

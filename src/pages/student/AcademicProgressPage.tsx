@@ -2,7 +2,10 @@ import React from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { StatCard } from '../../components/common/StatCard';
-import { calculateAcademicProgress } from '../../utils/gpaCalculator';
+import {
+  calculateAcademicProgress,
+  calculateCumulativeGPA,
+} from '../../utils/gpaCalculator';
 import {
   Award,
   BookOpen,
@@ -15,15 +18,36 @@ import {
 } from 'lucide-react';
 
 export const AcademicProgressPage: React.FC = () => {
-  const { activeStudent, courses, grades, activeKrs } = useAcademic();
+const { activeStudent, courses, grades, studyPlans } = useAcademic();
 
-  if (!activeStudent) return null;
+if (!activeStudent) return null;
 
-  const currentEnrolledCredits = activeKrs?.totalCredits || 0;
-  const progress = calculateAcademicProgress(grades, currentEnrolledCredits, 144);
+// Hanya KRS yang sudah diajukan atau disetujui yang dihitung
+const currentKrs = studyPlans.find(
+  (plan) =>
+    plan.studentId === activeStudent.id &&
+    plan.semester === activeStudent.currentSemester &&
+    plan.academicYear === activeStudent.academicYear &&
+    (plan.status === 'submitted' || plan.status === 'approved')
+);
 
-  const passedCourseIds = grades.filter((g) => g.isPassed).map((g) => g.courseId);
-  const enrolledCourseIds = activeKrs?.items.map((i) => i.courseId) || [];
+const currentEnrolledCredits = currentKrs?.totalCredits || 0;
+
+const progress = calculateAcademicProgress(
+  grades,
+  currentEnrolledCredits
+);
+
+const cumulativeGpa = calculateCumulativeGPA(grades);
+
+const passedGrades = grades.filter((g) => g.isPassed);
+
+const passedCourseIds = [
+  ...new Set(passedGrades.map((g) => g.courseId)),
+];
+
+const enrolledCourseIds =
+  currentKrs?.items.map((item) => item.courseId) || [];
 
   // Categorize courses
   const categories = ['Wajib Prodi', 'Wajib Universitas', 'Tugas Akhir'] as const;
@@ -40,14 +64,22 @@ export const AcademicProgressPage: React.FC = () => {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Target Kelulusan"
-          value="144 SKS"
+          value={`${progress.graduationTarget} SKS`}
           subtitle="Standar Sarjana Komputer (S.Kom)"
           icon={GraduationCap}
           iconColor="text-indigo-600"
           iconBg="bg-indigo-50"
+        />
+        <StatCard
+          title="IPK Kumulatif"
+          value={cumulativeGpa.toFixed(2)}
+          subtitle="Indeks Prestasi Kumulatif"
+          icon={Award}
+          iconColor="text-violet-600"
+          iconBg="bg-violet-50"
         />
         <StatCard
           title="SKS Lulus"
@@ -60,7 +92,7 @@ export const AcademicProgressPage: React.FC = () => {
         <StatCard
           title="SKS Sedang Ditempuh"
           value={`${progress.creditsCurrent} SKS`}
-          subtitle="Semester 5 Ganjil"
+          subtitle={`Semester ${activeStudent.currentSemester} — ${activeStudent.academicYear}`}
           icon={Clock}
           iconColor="text-blue-600"
           iconBg="bg-blue-50"
@@ -84,12 +116,22 @@ export const AcademicProgressPage: React.FC = () => {
         <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden flex">
           <div
             className="bg-emerald-500 h-4 transition-all duration-500"
-            style={{ width: `${(progress.creditsEarned / 144) * 100}%` }}
+            style={{
+              width: `${Math.min(
+                100,
+                (progress.creditsEarned / progress.graduationTarget) * 100
+              )}%`,
+            }}
             title={`Lulus: ${progress.creditsEarned} SKS`}
           ></div>
           <div
             className="bg-blue-500 h-4 transition-all duration-500"
-            style={{ width: `${(progress.creditsCurrent / 144) * 100}%` }}
+            style={{
+              width: `${Math.min(
+                100,
+                (progress.creditsCurrent / progress.graduationTarget) * 100
+              )}%`,
+            }}
             title={`Sedang Ditempuh: ${progress.creditsCurrent} SKS`}
           ></div>
         </div>
@@ -143,7 +185,7 @@ export const AcademicProgressPage: React.FC = () => {
                     {catCourses.map((c) => {
                       const isPassed = passedCourseIds.includes(c.id);
                       const isEnrolled = enrolledCourseIds.includes(c.id);
-                      const grade = grades.find((g) => g.courseId === c.id);
+                      const grade = passedGrades.find((g) => g.courseId === c.id);
 
                       return (
                         <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
