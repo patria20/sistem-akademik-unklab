@@ -81,6 +81,8 @@ export const CourseDemandAnalyzerPage: React.FC = () => {
       room,
       capacity,
       enrolled: 0,
+      semester: course.semester,
+      academicYear: '2026/2027 Ganjil',
     };
 
     addNewClass(newClassObj);

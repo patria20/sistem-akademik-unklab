@@ -15,21 +15,45 @@ import {
   TrendingUp,
   FileCheck2,
   Clock,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const GradesPage: React.FC = () => {
-  const { activeStudent, grades, activeLecturer } = useAcademic();
+  const { activeStudent, grades, lecturers, activeLecturer } = useAcademic();
   const [selectedSemester, setSelectedSemester] = useState<string>('all');
 
-  if (!activeStudent) return null;
+  // Guard clause: jika data mahasiswa tidak ditemukan, tampilkan pesan aman dan jangan render tabel
+  if (!activeStudent) {
+    return (
+      <div className="bg-white rounded-2xl p-8 border border-slate-200/80 shadow-xs text-center">
+        <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <h3 className="font-bold text-slate-900 text-lg mb-2">Data Mahasiswa Tidak Ditemukan</h3>
+        <p className="text-slate-500 mb-6">
+          Akun yang sedang login tidak terhubung dengan data mahasiswa. Silakan login dengan akun mahasiswa yang valid untuk mengakses Transkrip Nilai dan KHS.
+        </p>
+      </div>
+    );
+  }
+
+  // Ambil data dosen pembimbing dari daftar lecturers untuk NIDN yang akurat (tidak ada hardcode)
+  const advisor = lecturers.find((l) => l.id === activeStudent.academicAdvisorId);
+  const dean = lecturers.find((l) => l.title?.includes('Dekan'));
+
+  // Filter nilai secara ketat hanya untuk mahasiswa yang login (studentId === activeStudent.id)
+  // sehingga mahasiswa tidak mungkin melihat nilai mahasiswa lain
+  const studentGrades = useMemo(() => {
+    return grades.filter((g) => g.studentId === activeStudent.id);
+  }, [grades, activeStudent]);
 
   // Available semesters including active semester 5
   const semesters = [1, 2, 3, 4, 5];
 
   const filteredGrades = useMemo(() => {
-    if (selectedSemester === 'all') return grades;
-    return grades.filter((g) => g.semester.toString() === selectedSemester);
-  }, [grades, selectedSemester]);
+    if (selectedSemester === 'all') return studentGrades;
+    return studentGrades.filter((g) => g.semester.toString() === selectedSemester);
+  }, [studentGrades, selectedSemester]);
 
   const totalCredits = useMemo(() => {
     return filteredGrades.reduce((sum, g) => sum + g.credits, 0);
@@ -160,7 +184,7 @@ export const GradesPage: React.FC = () => {
             </span>
           </div>
           <span className="text-[11px] font-mono font-bold text-slate-500 shrink-0">
-            NIDN: 0914097501 • FILKOM-IT
+            NIDN: {advisor?.nidn || '-'} • FILKOM-IT
           </span>
         </div>
       </div>
@@ -275,7 +299,7 @@ export const GradesPage: React.FC = () => {
 
                     {/* Numeric Score */}
                     <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
-                      {g.score !== undefined ? g.score : (g.letterGrade === 'A' ? 90 : g.letterGrade === 'A-' ? 82 : 78)}
+                      {g.score !== undefined ? g.score : '-'}
                     </td>
 
                     {/* Letter Grade */}
@@ -297,7 +321,7 @@ export const GradesPage: React.FC = () => {
 
                     {/* Grade Point */}
                     <td className="py-3 px-4 text-center font-semibold text-slate-600">
-                      {g.gradePoint.toFixed(2)}
+                      {g.gradePoint !== undefined ? g.gradePoint.toFixed(2) : '-'}
                     </td>
 
                     {/* Total Mutu (SKS x Bobot) */}
@@ -307,7 +331,7 @@ export const GradesPage: React.FC = () => {
 
                     {/* Lecturer Name */}
                     <td className="py-3 px-4 text-slate-600 text-[11px] font-medium">
-                      {g.lecturerName || activeStudent.academicAdvisorName}
+                      {g.lecturerName || '-'}
                     </td>
 
                     {/* Pass Status */}
@@ -373,8 +397,8 @@ export const GradesPage: React.FC = () => {
             <p>Mengetahui,</p>
             <p className="font-medium">Dekan Fakultas Ilmu Komputer</p>
             <div>
-              <p className="font-bold underline text-sm">Stenly R. Pungus, S.Kom., MT., M.M., Ph.D.</p>
-              <p className="text-[10px] text-slate-600">NIDN: 0912038401</p>
+              <p className="font-bold underline text-sm">{dean?.name || 'Stenly R. Pungus, S.Kom., MT., M.M., Ph.D.'}</p>
+              <p className="text-[10px] text-slate-600">NIDN: {dean?.nidn || '0912038401'}</p>
             </div>
           </div>
 
@@ -382,8 +406,8 @@ export const GradesPage: React.FC = () => {
             <p>Airmadidi, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
             <p className="font-medium">Dosen Pembina Akademik IT 2024</p>
             <div>
-              <p className="font-bold underline text-sm">{activeStudent.academicAdvisorName}</p>
-              <p className="text-[10px] text-slate-600">NIDN: 0914097501</p>
+              <p className="font-bold underline text-sm">{advisor?.name || activeStudent.academicAdvisorName}</p>
+              <p className="text-[10px] text-slate-600">NIDN: {advisor?.nidn || '-'}</p>
             </div>
           </div>
         </div>

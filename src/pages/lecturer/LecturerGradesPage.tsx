@@ -17,40 +17,49 @@ import {
 } from 'lucide-react';
 
 export const LecturerGradesPage: React.FC = () => {
-  const { classes, students, activeLecturer, saveClassGrades, allGrades } = useAcademic();
+  const { classes, students, studyPlans, activeLecturer, saveClassGrades, allGrades } = useAcademic();
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [successToast, setSuccessToast] = useState<{ message: string; count: number } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  // Filter classes taught by active lecturer, fallback to all classes if none
+  // Filter classes taught by active lecturer only (no fallback to all classes)
   const lecturerClasses = useMemo(() => {
-    const list = classes.filter((c) => c.lecturerId === activeLecturer?.id);
-    return list.length > 0 ? list : classes;
+    return classes.filter((c) => c.lecturerId === activeLecturer?.id);
   }, [classes, activeLecturer]);
 
-  useEffect(() => {
-    if (!selectedClassId && lecturerClasses.length > 0) {
-      setSelectedClassId(lecturerClasses[0].id);
-    }
-  }, [selectedClassId, lecturerClasses]);
-
-  const currentClass = classes.find((c) => c.id === selectedClassId) || lecturerClasses[0];
+  const currentClass = classes.find((c) => c.id === selectedClassId) || null;
 
   // Local state for inputting student grades
   const [gradesInput, setGradesInput] = useState<Record<string, { tugas: number; uts: number; uas: number }>>({});
 
+  // Students enrolled in the currently selected class (via study plan classId references)
+  const classStudents = useMemo(() => {
+    if (!currentClass) return [];
+    const enrolledStudentIds = new Set(
+      studyPlans
+        .filter((sp) => sp.items.some((item) => item.classId === currentClass.id))
+        .map((sp) => sp.studentId)
+    );
+    return students.filter((std) => enrolledStudentIds.has(std.id));
+  }, [currentClass, students, studyPlans]);
+
   // Sync inputs with existing records in storage when selected class changes
   useEffect(() => {
-    if (!currentClass) return;
+    if (!currentClass) {
+      setGradesInput({});
+      setIsDirty(false);
+      return;
+    }
 
+    // Only existing grades for this exact class (studentId + classId, never courseCode fallback)
     const classExistingGrades = allGrades.filter(
-      (g) => g.classId === currentClass.id || g.courseCode === currentClass.courseCode
+      (g) => g.classId === currentClass.id
     );
 
     const initialInputs: Record<string, { tugas: number; uts: number; uas: number }> = {};
 
-    students.forEach((std) => {
+    classStudents.forEach((std) => {
       const existing = classExistingGrades.find((g) => g.studentId === std.id);
       if (existing && existing.componentScores) {
         initialInputs[std.id] = {
@@ -59,21 +68,14 @@ export const LecturerGradesPage: React.FC = () => {
           uas: existing.componentScores.uas,
         };
       } else {
-        // Default dummy starting grades for simulation
-        const defaults: Record<string, { tugas: number; uts: number; uas: number }> = {
-          std_01: { tugas: 88, uts: 86, uas: 90 },
-          std_02: { tugas: 94, uts: 92, uas: 95 },
-          std_03: { tugas: 74, uts: 70, uas: 72 },
-          std_04: { tugas: 85, uts: 84, uas: 88 },
-          std_05: { tugas: 80, uts: 78, uas: 80 },
-        };
-        initialInputs[std.id] = defaults[std.id] || { tugas: 80, uts: 80, uas: 80 };
+        // No pre-existing grades: start with empty inputs (no dummy defaults)
+        initialInputs[std.id] = { tugas: 0, uts: 0, uas: 0 };
       }
     });
 
     setGradesInput(initialInputs);
     setIsDirty(false);
-  }, [currentClass, students, allGrades]);
+  }, [currentClass, classStudents, allGrades]);
 
   const calculateFinal = (tugas: number, uts: number, uas: number) => {
     return Math.round(tugas * 0.3 + uts * 0.3 + uas * 0.4);
@@ -96,17 +98,18 @@ export const LecturerGradesPage: React.FC = () => {
     setGradesInput((prev) => ({
       ...prev,
       [studentId]: {
-        ...(prev[studentId] || { tugas: 80, uts: 80, uas: 80 }),
+        ...(prev[studentId] || { tugas: 0, uts: 0, uas: 0 }),
         [field]: safeVal,
       },
     }));
     setIsDirty(true);
   };
 
-  // Quick fill simulator
+  // Quick fill simulator — HANYA untuk simulasi demo, bukan data asli
   const handleQuickFill = (preset: 'high' | 'standard') => {
+    if (!currentClass) return;
     const updated: Record<string, { tugas: number; uts: number; uas: number }> = {};
-    students.forEach((std, i) => {
+    classStudents.forEach((std, i) => {
       if (preset === 'high') {
         updated[std.id] = {
           tugas: Math.min(100, 88 + (i % 3) * 4),
@@ -128,8 +131,8 @@ export const LecturerGradesPage: React.FC = () => {
   const handleSaveGrades = () => {
     if (!currentClass) return;
 
-    const formattedPayload = students.map((std) => {
-      const vals = gradesInput[std.id] || { tugas: 80, uts: 80, uas: 80 };
+    const formattedPayload = classStudents.map((std) => {
+      const vals = gradesInput[std.id] || { tugas: 0, uts: 0, uas: 0 };
       return {
         studentId: std.id,
         tugas: vals.tugas,
@@ -143,7 +146,7 @@ export const LecturerGradesPage: React.FC = () => {
 
     setSuccessToast({
       message: `Nilai mata kuliah ${currentClass.courseCode} (${currentClass.courseName}) Seksi ${currentClass.section} berhasil disimpan dan langsung terhubung ke Transkrip Akademik Mahasiswa!`,
-      count: students.length,
+      count: formattedPayload.length,
     });
 
     setTimeout(() => {

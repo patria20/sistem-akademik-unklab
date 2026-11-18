@@ -27,7 +27,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const { user, role, switchRole, logout } = useAuth();
-  const { notifications, markNotificationAsRead } = useAcademic();
+  const { notifications, markNotificationAsRead, lecturers } = useAcademic();
   const { info, success } = useToast();
   const navigate = useNavigate();
 
@@ -150,8 +150,17 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
                   >
                     <UserCheck className="w-4 h-4 text-emerald-600" />
                     <div>
-                      <p>Dosen PA (Dr. Ronny Gosal)</p>
-                      <p className="text-[10px] text-slate-400">NIDN: 0912038401</p>
+                      {lecturers.length > 0 ? (
+                        <>
+                          <p>Dosen PA ({lecturers[0].name})</p>
+                          <p className="text-[10px] text-slate-400">NIDN: {lecturers[0].nidn}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>Dosen PA</p>
+                          <p className="text-[10px] text-slate-400">NIDN: -</p>
+                        </>
+                      )}
                     </div>
                   </button>
                   <button

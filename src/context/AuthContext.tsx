@@ -55,29 +55,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback((email: string, role?: UserRole): boolean => {
     const trimmedEmail = email.trim().toLowerCase();
     const found = MOCK_USERS.find(
-      (u) => u.email.toLowerCase() === trimmedEmail || (role && u.role === role)
+      (u) => u.email.toLowerCase() === trimmedEmail
     );
 
-    if (found) {
-      setUser(found);
-      const now = Date.now();
-      setSessionStartedAt(now);
-      localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
-      return true;
+    if (!found) {
+      return false;
     }
 
-    if (role) {
-      const byRole = MOCK_USERS.find((u) => u.role === role);
-      if (byRole) {
-        setUser(byRole);
-        const now = Date.now();
-        setSessionStartedAt(now);
-        localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
-        return true;
-      }
+    // Validasi role: jika role ditentukan, pastikan akun tersebut memiliki role yang cocok
+    if (role && found.role !== role) {
+      return false;
     }
 
-    return false;
+    setUser(found);
+    const now = Date.now();
+    setSessionStartedAt(now);
+    localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
+    return true;
   }, []);
 
   const logout = useCallback(() => {

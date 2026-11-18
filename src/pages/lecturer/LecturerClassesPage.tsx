@@ -1,16 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
 import { BookOpen, Users, Calendar, MapPin, Clock, Search } from 'lucide-react';
 
 export const LecturerClassesPage: React.FC = () => {
-  const { activeLecturer, classes, students } = useAcademic();
+  const { activeLecturer, classes, students, studyPlans } = useAcademic();
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
 
   if (!activeLecturer) return null;
 
   const lecturerClasses = classes.filter((c) => c.lecturerId === activeLecturer.id);
+
+  // Hitung jumlah mahasiswa terdaftar per kelas secara dinamis dari data StudyPlan (KRS)
+  const enrolledCountByClass = useMemo(() => {
+    const counts: Record<string, number> = {};
+    studyPlans.forEach((sp) => {
+      sp.items.forEach((item) => {
+        counts[item.classId] = (counts[item.classId] || 0) + 1;
+      });
+    });
+    return counts;
+  }, [studyPlans]);
+
   const currentClass = classes.find((c) => c.id === selectedClassId) || lecturerClasses[0];
+
+  // Mahasiswa yang terdaftar di kelas yang dipilih (berdasarkan classId di study plan items)
+  const enrolledStudentIds = useMemo(() => {
+    const ids = new Set<string>();
+    studyPlans.forEach((sp) => {
+      sp.items.forEach((item) => {
+        if (item.classId === currentClass?.id) {
+          ids.add(sp.studentId);
+        }
+      });
+    });
+    return ids;
+  }, [currentClass, studyPlans]);
+
+  const enrolledStudents = students.filter((std) => enrolledStudentIds.has(std.id));
 
   return (
     <div className="space-y-6">
@@ -50,7 +77,7 @@ export const LecturerClassesPage: React.FC = () => {
                   {cls.day}, {cls.startTime}
                 </span>
                 <span className="font-bold text-blue-600">
-                  {cls.enrolled} / {cls.capacity} Mhs
+                  {enrolledCountByClass[cls.id] || 0} / {cls.capacity} Mhs
                 </span>
               </p>
             </div>
@@ -71,7 +98,7 @@ export const LecturerClassesPage: React.FC = () => {
               </p>
             </div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 self-start sm:self-auto">
-              {currentClass.enrolled} Mahasiswa Terdaftar
+              {enrolledStudents.length} Mahasiswa Terdaftar
             </span>
           </div>
 
@@ -88,7 +115,7 @@ export const LecturerClassesPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {students.map((std, idx) => (
+                {enrolledStudents.map((std, idx) => (
                   <tr key={std.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-4 text-slate-400">{idx + 1}</td>
                     <td className="py-3 px-4 font-bold text-slate-800">{std.name}</td>

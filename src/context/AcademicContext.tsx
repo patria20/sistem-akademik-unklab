@@ -80,17 +80,17 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setAllGrades(all);
 
     const loggedStudent = currentStudents.find((s) => s.userId === user?.id);
-    const targetStudentId = loggedStudent ? loggedStudent.id : 'std_01';
-    setGrades(AcademicService.getGradesByStudentId(targetStudentId));
+    const targetStudentId = loggedStudent ? loggedStudent.id : undefined;
+    setGrades(targetStudentId ? AcademicService.getGradesByStudentId(targetStudentId) : []);
   }, [user]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  const activeStudent = students.find((s) => s.userId === user?.id) || students[0];
-  const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
-  const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
+  const activeStudent = students.find((s) => s.userId === user?.id);
+  const activeLecturer = lecturers.find((l) => l.userId === user?.id);
+  const activeKrs = activeStudent ? studyPlans.find((p) => p.studentId === activeStudent.id) : undefined;
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
@@ -158,7 +158,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const handleSaveClassGrades = (classId: string, inputs: ClassGradeInput[]) => {
-    const lecturerName = user?.name || activeLecturer?.name || 'Semmy W. Taju, S.Kom., M.S., Ph.D.';
+    const lecturerName = user?.name || activeLecturer?.name || '';
     const result = AcademicService.saveClassGrades(classId, inputs, lecturerName);
     refreshData();
     return result;
