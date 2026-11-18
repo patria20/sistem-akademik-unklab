@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAcademic } from '../../context/AcademicContext';
 import { PageHeader } from '../../components/common/PageHeader';
 
@@ -12,7 +11,7 @@ export const LecturerClassesPage: React.FC = () => {
 
   if (!activeLecturer) return null;
 
-  // Hanya kelas yang diampu dosen yang sedang login.
+  // Hanya kelas yang diampu dosen yang sedang login
   const lecturerClasses = classes.filter(
     (cls) => cls.lecturerId === activeLecturer.id
   );
@@ -21,21 +20,15 @@ export const LecturerClassesPage: React.FC = () => {
     lecturerClasses.find((cls) => cls.id === selectedClassId) ||
     lecturerClasses[0];
 
-  // Mengambil mahasiswa dengan KRS dan item kelas yang sudah disetujui.
+  // Mengambil mahasiswa dengan KRS yang terdaftar pada kelas ini
   const getApprovedRoster = (classId: string) => {
-    const registeredStudentIds = new Set(
-      studyPlans
-        .filter((plan) => plan.status === 'approved')
-        .flatMap((plan) =>
-          plan.items
-            .filter(
-              (item) =>
-                item.classId === classId &&
-                item.status === 'approved'
-            )
-            .map(() => plan.studentId)
-        )
-    );
+    const registeredStudentIds = new Set<string>();
+
+    studyPlans.forEach((plan) => {
+      if (plan.items.some((item) => item.classId === classId)) {
+        registeredStudentIds.add(plan.studentId);
+      }
+    });
 
     return students.filter((student) =>
       registeredStudentIds.has(student.id)
@@ -174,8 +167,7 @@ export const LecturerClassesPage: React.FC = () => {
                         colSpan={6}
                         className="py-10 px-4 text-center text-slate-500"
                       >
-                        Belum ada mahasiswa dengan KRS yang disetujui
-                        pada kelas ini.
+                        Belum ada mahasiswa dengan KRS yang disetujui pada kelas ini.
                       </td>
                     </tr>
                   )}

@@ -130,17 +130,9 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshData();
   }, [refreshData]);
 
-  const activeStudent = students.find(
-    (student) => student.userId === user?.id
-  );
-
-  const activeLecturer = lecturers.find(
-    (lecturer) => lecturer.userId === user?.id
-  ) || (user?.role === 'lecturer' ? lecturers[0] : undefined);
-
-  const activeKrs = studyPlans.find(
-    (plan) => plan.studentId === activeStudent?.id
-  );
+  const activeStudent = students.find((s) => s.userId === user?.id);
+  const activeLecturer = lecturers.find((l) => l.userId === user?.id);
+  const activeKrs = activeStudent ? studyPlans.find((p) => p.studentId === activeStudent.id) : undefined;
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
@@ -284,21 +276,9 @@ const handleReviewAddDropRequest = (
     refreshData();
   };
 
-  const handleSaveClassGrades = (
-    classId: string,
-    inputs: ClassGradeInput[]
-  ) => {
-    const lecturerName =
-      user?.name ||
-      activeLecturer?.name ||
-      'Semmy W. Taju, S.Kom., M.S., Ph.D.';
-
-    const result = AcademicService.saveClassGrades(
-      classId,
-      inputs,
-      lecturerName
-    );
-
+  const handleSaveClassGrades = (classId: string, inputs: ClassGradeInput[]) => {
+    const lecturerName = user?.name || activeLecturer?.name || '';
+    const result = AcademicService.saveClassGrades(classId, inputs, lecturerName);
     refreshData();
 
     return result;

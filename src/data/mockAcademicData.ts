@@ -26,6 +26,46 @@ export const MOCK_USERS: User[] = [
     identityNumber: '12410168',
   },
   {
+    id: 'usr_student_02',
+    username: 'sarah',
+    name: 'Sarah Lumempouw',
+    email: 'sarah.lumempouw@unklab.ac.id',
+    role: 'student',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=250&q=80',
+    phone: '081244556678',
+    identityNumber: '105022110002',
+  },
+  {
+    id: 'usr_student_03',
+    username: 'kevin',
+    name: 'Kevin Runtu',
+    email: 'kevin.runtu@unklab.ac.id',
+    role: 'student',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=250&q=80',
+    phone: '081244556679',
+    identityNumber: '105022110003',
+  },
+  {
+    id: 'usr_student_04',
+    username: 'jessica',
+    name: 'Jessica Karinda',
+    email: 'jessica.karinda@unklab.ac.id',
+    role: 'student',
+    avatar: 'https://images.unsplash.com/photo-1489424734184-a375c6767f8a?auto=format&fit=crop&w=250&q=80',
+    phone: '081244556680',
+    identityNumber: '105022110004',
+  },
+  {
+    id: 'usr_student_05',
+    username: 'bryan',
+    name: 'Bryan Pinontoan',
+    email: 'bryan.pinontoan@unklab.ac.id',
+    role: 'student',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=250&q=80',
+    phone: '081244556681',
+    identityNumber: '105022110005',
+  },
+  {
     id: 'usr_lecturer_01',
     username: 'dosen',
     name: 'Semmy W. Taju, S.Kom., M.S., Ph.D.',
@@ -413,6 +453,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab AI (GK1-304)',
     capacity: 35,
     enrolled: 32,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_if401_b',
@@ -429,6 +471,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab AI (GK1-304)',
     capacity: 35,
     enrolled: 28,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_if402_a',
@@ -444,7 +488,9 @@ export const MOCK_CLASSES: CourseClass[] = [
     endTime: '15:30',
     room: 'Lab Komputer 2 (GK1-205)',
     capacity: 35,
-    enrolled: 35,
+    enrolled: 35, // Penuh
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_if402_b',
@@ -461,6 +507,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab Komputer 2 (GK1-205)',
     capacity: 35,
     enrolled: 24,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_if403_a',
@@ -477,6 +525,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'GK1-302',
     capacity: 40,
     enrolled: 30,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_if404_a',
@@ -493,6 +543,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab Jaringan (GK1-201)',
     capacity: 35,
     enrolled: 29,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_un101_a',
@@ -509,6 +561,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Pioneer Hall 102',
     capacity: 50,
     enrolled: 42,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_conflict_demo',
@@ -525,6 +579,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'GK1-105',
     capacity: 30,
     enrolled: 15,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_ifak361_c',
@@ -541,6 +597,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab Jaringan (GK1-201)',
     capacity: 35,
     enrolled: 20,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_ifrl311_a',
@@ -557,6 +615,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'GK1-105',
     capacity: 35,
     enrolled: 18,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
   {
     id: 'cls_ifgi341_a',
@@ -573,6 +633,8 @@ export const MOCK_CLASSES: CourseClass[] = [
     room: 'Lab Komputer 2 (GK1-205)',
     capacity: 35,
     enrolled: 22,
+    semester: 5,
+    academicYear: '2026/2027 Ganjil',
   },
 ];
 

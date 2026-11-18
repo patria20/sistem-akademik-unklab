@@ -77,6 +77,8 @@ export interface CourseClass {
   room: string;
   capacity: number;
   enrolled: number;
+  semester: number;
+  academicYear: string;
 }
 
 export interface StudyPlanItem {

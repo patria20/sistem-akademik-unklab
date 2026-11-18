@@ -428,15 +428,42 @@ export class AcademicService {
   static saveClassGrades(
     classId: string,
     inputs: ClassGradeInput[],
-    lecturerName: string = 'Semmy W. Taju, S.Kom., M.S., Ph.D.'
+    lecturerName: string = ''
   ): GradeRecord[] {
     const classes = this.getClasses();
-    const cls = classes.find((item) => item.id === classId);
+    const cls = classes.find((c) => c.id === classId);
+    if (!cls) {
+      throw new Error(`Kelas dengan ID ${classId} tidak ditemukan`);
+    }
 
-    const courseCode = cls ? cls.courseCode : 'IF-MK';
-    const courseName = cls ? cls.courseName : 'Mata Kuliah';
-    const courseCredits = cls ? cls.credits : 3;
-    const courseId = cls ? cls.courseId : `crs_${classId}`;
+    // Validasi ketat: pastikan setiap studentId terdaftar sebagai peserta kelas ini
+    // melalui data StudyPlan (KRS). Tidak ada fallback, tidak ada pengecualian.
+    const studyPlans = this.getStudyPlans();
+    const enrolledStudentIds = new Set(
+      studyPlans
+        .filter((sp) => sp.items.some((item) => item.classId === classId))
+        .map((sp) => sp.studentId)
+    );
+
+    const unregisteredStudents = inputs.filter((input) => !enrolledStudentIds.has(input.studentId));
+    if (unregisteredStudents.length > 0) {
+      const nims = unregisteredStudents
+        .map((inp) => {
+          const s = this.getStudentById(inp.studentId);
+          return s ? `${s.name} (${s.nim})` : inp.studentId;
+        })
+        .join(', ');
+      throw new Error(
+        `Mahasiswa berikut tidak terdaftar sebagai peserta kelas ${cls.courseCode} Seksi ${cls.section} dan tidak boleh dinilai: ${nims}`
+      );
+    }
+
+    const courseCode = cls.courseCode;
+    const courseName = cls.courseName;
+    const courseCredits = cls.credits;
+    const courseId = cls.courseId;
+    const semester = cls.semester;
+    const academicYear = cls.academicYear;
 
     const allGrades = this.getAllGrades();
     const savedRecords: GradeRecord[] = [];
@@ -456,13 +483,9 @@ export class AcademicService {
       const { letter, point } = this.scoreToGrade(finalScore);
       const isPassed = !['D', 'F'].includes(letter);
 
+      // Hanya cari berdasarkan studentId + classId, tidak gunakan courseCode sebagai alternatif
       const existingIndex = allGrades.findIndex(
-        (grade) =>
-          grade.studentId === input.studentId &&
-          (
-            grade.classId === classId ||
-            grade.courseCode === courseCode
-          )
+        (g) => g.studentId === input.studentId && g.classId === classId
       );
 
       const gradeRecord: GradeRecord = {
@@ -475,8 +498,8 @@ export class AcademicService {
         courseCode,
         courseName,
         credits: courseCredits,
-        semester: 5,
-        academicYear: '2026/2027 Ganjil',
+        semester,
+        academicYear,
         score: finalScore,
         componentScores: {
           tugas: input.tugas,
@@ -501,8 +524,23 @@ export class AcademicService {
 
       savedRecords.push(gradeRecord);
 
-      // Recalculate student GPA, IPS, and earned credits secara konsisten menggunakan aturan latest attempt
-      this.recalculateStudentMetrics(input.studentId);
+      // Re-calculate Student GPA (IPK), IPS, and Credits Earned
+      const studentGrades = allGrades.filter((g) => g.studentId === input.studentId);
+      const totalCredits = studentGrades.reduce((sum, g) => sum + g.credits, 0);
+      const totalPoints = studentGrades.reduce((sum, g) => sum + g.gradePoint * g.credits, 0);
+      const newGpa = totalCredits > 0 ? Number((totalPoints / totalCredits).toFixed(2)) : 0;
+      const passedCredits = studentGrades.filter((g) => g.isPassed).reduce((sum, g) => sum + g.credits, 0);
+
+      const semGrades = studentGrades.filter((g) => g.semester === semester);
+      const semCredits = semGrades.reduce((sum, g) => sum + g.credits, 0);
+      const semPoints = semGrades.reduce((sum, g) => sum + g.gradePoint * g.credits, 0);
+      const newIps = semCredits > 0 ? Number((semPoints / semCredits).toFixed(2)) : newGpa;
+
+      this.updateStudent(input.studentId, {
+        cumulativeGpa: newGpa,
+        lastSemesterGpa: newIps,
+        creditsEarned: passedCredits,
+      });
 
       // Send notification to student
       const student = this.getStudentById(input.studentId);
@@ -527,7 +565,7 @@ export class AcademicService {
       lecturerName,
       'lecturer',
       'INPUT_GRADES',
-      `Menyimpan dan mempublikasikan nilai kelas ${courseCode} (${cls?.section || 'A'}) untuk ${inputs.length} mahasiswa ke Transkrip Akademik.`
+      `Menyimpan dan mempublikasikan nilai kelas ${courseCode} (${cls.section}) untuk ${inputs.length} mahasiswa ke Transkrip Akademik.`
     );
 
     return savedRecords;
