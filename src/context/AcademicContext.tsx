@@ -68,8 +68,8 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     AcademicService.initialize();
 
     const currentStudents = AcademicService.getStudents();
-
     setStudents(currentStudents);
+
     setLecturers(AcademicService.getLecturers());
     setCourses(AcademicService.getCourses());
     setClasses(AcademicService.getClasses());
@@ -93,7 +93,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         ? AcademicService.getGradesByStudentId(loggedStudent.id)
         : []
     );
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     refreshData();
@@ -105,11 +105,11 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const activeLecturer = lecturers.find(
     (lecturer) => lecturer.userId === user?.id
-  ) || lecturers[0];
+  ) || (user?.role === 'lecturer' ? lecturers[0] : undefined);
 
   const activeKrs = studyPlans.find(
     (plan) => plan.studentId === activeStudent?.id
-  ) || studyPlans[0];
+  );
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
@@ -162,8 +162,10 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!activeStudent) return;
 
     const targetLec = lecturers.find(
-      (lecturer) => lecturer.id === lecturerId
-    ) || lecturers[0];
+      (lecturer) =>
+        lecturer.id === lecturerId ||
+        lecturer.userId === lecturerId
+    );
 
     if (!targetLec) return;
 
