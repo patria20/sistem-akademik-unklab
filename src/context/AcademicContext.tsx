@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type {
   StudentProfile,
@@ -65,7 +66,9 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const refreshData = useCallback(() => {
     AcademicService.initialize();
+
     const currentStudents = AcademicService.getStudents();
+
     setStudents(currentStudents);
     setLecturers(AcademicService.getLecturers());
     setCourses(AcademicService.getCourses());
@@ -79,51 +82,91 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const all = AcademicService.getAllGrades();
     setAllGrades(all);
 
-    // Nilai hanya milik mahasiswa yang login. Akun tanpa data mahasiswa tidak mendapat nilai siapa pun.
-    const loggedStudent = currentStudents.find((s) => s.userId === user?.id);
-    setGrades(loggedStudent ? AcademicService.getGradesByStudentId(loggedStudent.id) : []);
+    // Nilai hanya milik mahasiswa yang sedang login.
+    // Akun tanpa data mahasiswa tidak mendapatkan nilai mahasiswa lain.
+    const loggedStudent = currentStudents.find(
+      (student) => student.userId === user?.id
+    );
+
+    setGrades(
+      loggedStudent
+        ? AcademicService.getGradesByStudentId(loggedStudent.id)
+        : []
+    );
   }, [user]);
 
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  const activeStudent = students.find((s) => s.userId === user?.id);
-  const activeLecturer = lecturers.find((l) => l.userId === user?.id) || lecturers[0];
-  const activeKrs = studyPlans.find((p) => p.studentId === activeStudent?.id) || studyPlans[0];
+  const activeStudent = students.find(
+    (student) => student.userId === user?.id
+  );
+
+  const activeLecturer = lecturers.find(
+    (lecturer) => lecturer.userId === user?.id
+  ) || lecturers[0];
+
+  const activeKrs = studyPlans.find(
+    (plan) => plan.studentId === activeStudent?.id
+  ) || studyPlans[0];
 
   const handleSaveKrsDraft = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
+
     const result = AcademicService.saveKrsDraft(activeStudent.id, items, notes);
     refreshData();
+
     return result;
   };
 
   const handleSubmitKrs = (items: StudyPlanItem[], notes: string) => {
     if (!activeStudent) throw new Error('No active student found');
+
     const result = AcademicService.submitKrs(activeStudent.id, items, notes);
     refreshData();
+
     return result;
   };
 
-  const handleReviewKrs = (krsId: string, decision: 'approved' | 'revision', feedback: string) => {
+  const handleReviewKrs = (
+    krsId: string,
+    decision: 'approved' | 'revision',
+    feedback: string
+  ) => {
     AcademicService.reviewKrs(krsId, decision, feedback, user?.name);
     refreshData();
   };
 
-  const handleRequestAttendanceCorrection = (attendanceId: string, reason: string) => {
+  const handleRequestAttendanceCorrection = (
+    attendanceId: string,
+    reason: string
+  ) => {
     AcademicService.requestAttendanceCorrection(attendanceId, reason);
     refreshData();
   };
 
-  const handleApproveAttendanceCorrection = (attendanceId: string, approved: boolean) => {
+  const handleApproveAttendanceCorrection = (
+    attendanceId: string,
+    approved: boolean
+  ) => {
     AcademicService.processAttendanceCorrection(attendanceId, approved);
     refreshData();
   };
 
-  const handleCreateConsultation = (lecturerId: string, topic: string, message: string) => {
+  const handleCreateConsultation = (
+    lecturerId: string,
+    topic: string,
+    message: string
+  ) => {
     if (!activeStudent) return;
-    const targetLec = lecturers.find((l) => l.id === lecturerId) || lecturers[0];
+
+    const targetLec = lecturers.find(
+      (lecturer) => lecturer.id === lecturerId
+    ) || lecturers[0];
+
+    if (!targetLec) return;
+
     AcademicService.createConsultation({
       studentId: activeStudent.id,
       studentName: activeStudent.name,
@@ -134,10 +177,15 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       message,
       status: 'waiting',
     });
+
     refreshData();
   };
 
-  const handleReplyConsultation = (id: string, reply: string, scheduledDate?: string) => {
+  const handleReplyConsultation = (
+    id: string,
+    reply: string,
+    scheduledDate?: string
+  ) => {
     AcademicService.replyConsultation(id, reply, scheduledDate);
     refreshData();
   };
@@ -157,10 +205,23 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshData();
   };
 
-  const handleSaveClassGrades = (classId: string, inputs: ClassGradeInput[]) => {
-    const lecturerName = user?.name || activeLecturer?.name || 'Semmy W. Taju, S.Kom., M.S., Ph.D.';
-    const result = AcademicService.saveClassGrades(classId, inputs, lecturerName);
+  const handleSaveClassGrades = (
+    classId: string,
+    inputs: ClassGradeInput[]
+  ) => {
+    const lecturerName =
+      user?.name ||
+      activeLecturer?.name ||
+      'Semmy W. Taju, S.Kom., M.S., Ph.D.';
+
+    const result = AcademicService.saveClassGrades(
+      classId,
+      inputs,
+      lecturerName
+    );
+
     refreshData();
+
     return result;
   };
 
@@ -213,8 +274,10 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
 export function useAcademic() {
   const context = useContext(AcademicContext);
+
   if (!context) {
     throw new Error('useAcademic must be used within an AcademicProvider');
   }
+
   return context;
 }

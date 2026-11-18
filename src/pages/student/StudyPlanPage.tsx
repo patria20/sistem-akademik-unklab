@@ -6,6 +6,10 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { validateStudyPlan, checkPrerequisite, validateClassCapacity } from '../../utils/academicValidator';
 import type { CourseClass, StudyPlanItem } from '../../types/academic';
 import {
+  calculateCumulativeGPA,
+  calculateMaxCreditLimit,
+} from '../../utils/gpaCalculator';
+import {
   BookOpen,
   Search,
   Filter,
@@ -39,6 +43,17 @@ export const StudyPlanPage: React.FC = () => {
 
   if (!activeStudent) return null;
 
+  // Calculate cumulative GPA (IPK) and authorized SKS limit
+  const cumulativeGpa = useMemo(
+    () => calculateCumulativeGPA(grades),
+    [grades]
+  );
+
+  const maxCreditLimit = useMemo(
+    () => calculateMaxCreditLimit(cumulativeGpa),
+    [cumulativeGpa]
+  );
+
   // Passed Course IDs
   const passedCourseIds = useMemo(
     () => grades.filter((g) => g.isPassed).map((g) => g.courseId),
@@ -67,9 +82,9 @@ export const StudyPlanPage: React.FC = () => {
       selectedClasses,
       courses,
       passedCourseIds,
-      activeStudent.maxCreditLimit
+      maxCreditLimit
     );
-  }, [selectedClasses, courses, passedCourseIds, activeStudent.maxCreditLimit]);
+  }, [selectedClasses, courses, passedCourseIds, maxCreditLimit]);
 
   const totalSelectedCredits = useMemo(() => {
     return selectedClasses.reduce((sum, c) => sum + (c.credits || 0), 0);
@@ -374,35 +389,35 @@ export const StudyPlanPage: React.FC = () => {
                 <span className="font-semibold text-slate-700">Total Beban SKS:</span>
                 <span
                   className={`text-sm font-black ${
-                    totalSelectedCredits > activeStudent.maxCreditLimit
+                    totalSelectedCredits > maxCreditLimit
                       ? 'text-red-600'
                       : 'text-blue-600'
                   }`}
                 >
-                  {totalSelectedCredits} / {activeStudent.maxCreditLimit} SKS
+                  {totalSelectedCredits} / {maxCreditLimit} SKS
                 </span>
               </div>
               {/* Progress bar */}
               <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
                 <div
                   className={`h-2 rounded-full transition-all duration-300 ${
-                    totalSelectedCredits > activeStudent.maxCreditLimit
+                    totalSelectedCredits > maxCreditLimit
                       ? 'bg-red-600'
-                      : totalSelectedCredits >= activeStudent.maxCreditLimit * 0.85
+                      : totalSelectedCredits >= maxCreditLimit * 0.85
                       ? 'bg-blue-600'
                       : 'bg-emerald-500'
                   }`}
                   style={{
                     width: `${Math.min(
                       100,
-                      (totalSelectedCredits / activeStudent.maxCreditLimit) * 100
+                      (totalSelectedCredits / maxCreditLimit) * 100
                     )}%`,
                   }}
                 ></div>
               </div>
               <p className="text-[10px] text-slate-500 text-right">
-                Batas maksimal berdasarkan IPS lalu ({activeStudent.lastSemesterGpa.toFixed(2)}):{' '}
-                <strong>{activeStudent.maxCreditLimit} SKS</strong>
+                Batas maksimal berdasarkan IPK ({cumulativeGpa.toFixed(2)}):
+                <strong>{maxCreditLimit} SKS</strong>
               </p>
             </div>
 

@@ -8,6 +8,7 @@ import {
   BookOpen,
   Calendar,
   Award,
+  History,
   CheckSquare,
   MessageSquare,
   Bot,

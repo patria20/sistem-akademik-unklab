@@ -162,6 +162,7 @@ export class AcademicService {
   }
 
   static getGradesByStudentId(studentId: string): GradeRecord[] {
+
     const grades = this.getAllGrades();
     return grades.filter((g) => g.studentId === studentId);
   }
@@ -275,6 +276,7 @@ export class AcademicService {
 
   static resetGradesToDefault(): void {
     setStoredItem(STORAGE_KEYS.GRADES, MOCK_INITIAL_GRADES);
+
   }
 
   // Study Plans (KRS)
