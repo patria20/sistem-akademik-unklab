@@ -11,6 +11,7 @@ import type {
   SystemNotification,
   AuditLog,
   GradeRecord,
+  AddDropRequest,
 } from '../types/academic';
 
 import {
@@ -25,6 +26,21 @@ import {
   MOCK_AUDIT_LOGS,
   MOCK_INITIAL_GRADES,
 } from '../data/mockAcademicData';
+import {
+  GRADE_POINTS_SCALE,
+  PASSING_GRADES,
+  isOfficialGrade,
+  getLatestOfficialAttempts,
+  calculateCumulativeGPA,
+} from '../utils/gpaCalculator';
+
+import {
+  checkPrerequisite,
+  validateScheduleConflict,
+  validateCreditLimit,
+  validateClassCapacity,
+  calculateMaxCreditLimit,
+} from '../utils/academicValidator';
 
 export interface ClassGradeInput {
   studentId: string;
@@ -33,11 +49,20 @@ export interface ClassGradeInput {
   uas: number;
 }
 
+export interface StudentGradeInput {
+  studentId: string;
+  courseId: string;
+  semester: number;
+  academicYear: string;
+  letterGrade: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'D' | 'F';
+}
+
 const STORAGE_KEYS = {
   STUDENTS: 'siam_unklab_students',
   CLASSES: 'siam_unklab_classes',
   COURSES: 'siam_unklab_courses',
   STUDY_PLANS: 'siam_unklab_study_plans',
+  ADD_DROP_REQUESTS: 'siam_unklab_add_drop_requests',
   ATTENDANCES: 'siam_unklab_attendances',
   CONSULTATIONS: 'siam_unklab_consultations',
   NOTIFICATIONS: 'siam_unklab_notifications',
@@ -62,12 +87,155 @@ function setStoredItem<T>(key: string, value: T): void {
   }
 }
 
+function validateAddDropAddition(
+  plan: StudyPlan,
+  candidateClass: CourseClass,
+  grades: GradeRecord[],
+  allClasses: CourseClass[],
+  allCourses: Course[]
+): string[] {
+  const errors: string[] = [];
+
+  // Mengambil percobaan nilai resmi terbaru setiap mata kuliah
+  const latestGrades = getLatestOfficialAttempts(grades);
+
+  const passedCourseIds = latestGrades
+    .filter(
+      (grade) =>
+        grade.isPassed &&
+        PASSING_GRADES.includes(grade.letterGrade)
+    )
+    .map((grade) => grade.courseId);
+
+  // Memastikan mata kuliah belum pernah lulus
+  if (passedCourseIds.includes(candidateClass.courseId)) {
+    errors.push(
+      `${candidateClass.courseCode} sudah dinyatakan lulus berdasarkan nilai terbaru.`
+    );
+  }
+
+  // Memeriksa prasyarat
+  const course = allCourses.find(
+    (item) => item.id === candidateClass.courseId
+  );
+
+  if (!course) {
+    errors.push(
+      `Data mata kuliah ${candidateClass.courseCode} tidak ditemukan dalam kurikulum.`
+    );
+  } else {
+    const prerequisiteCheck = checkPrerequisite(
+      course,
+      passedCourseIds,
+      allCourses
+    );
+
+    if (!prerequisiteCheck.satisfied) {
+      errors.push(
+        `Prasyarat ${candidateClass.courseCode} belum terpenuhi: ${prerequisiteCheck.missing.join(', ')}.`
+      );
+    }
+  }
+
+  // Kapasitas hanya diperiksa untuk kelas yang baru ditambahkan
+  const capacityCheck = validateClassCapacity(candidateClass);
+
+  if (capacityCheck.isFull) {
+    errors.push(
+      `Kelas ${candidateClass.courseCode} Paralel ${candidateClass.section} sudah penuh.`
+    );
+  }
+
+  // Memeriksa batas maksimal SKS
+  const maxCreditLimit = calculateMaxCreditLimit(
+    calculateCumulativeGPA(grades)
+  );
+
+  const proposedCredits =
+    plan.totalCredits + candidateClass.credits;
+
+  const creditCheck = validateCreditLimit(
+    proposedCredits,
+    maxCreditLimit
+  );
+
+  if (!creditCheck.valid) {
+    errors.push(
+      `Total SKS menjadi ${proposedCredits} SKS, melebihi batas maksimal ${maxCreditLimit} SKS.`
+    );
+  }
+
+  // Memeriksa jadwal seluruh kelas dalam KRS
+  const existingClasses = plan.items.map((item) => {
+    return allClasses.find(
+      (cls) => cls.id === item.classId
+    );
+  });
+
+  if (existingClasses.some((cls) => !cls)) {
+    errors.push(
+      'Ada data kelas dalam KRS yang tidak ditemukan.'
+    );
+  } else {
+    const scheduleCheck = validateScheduleConflict([
+      ...(existingClasses as CourseClass[]),
+      candidateClass,
+    ]);
+
+    if (scheduleCheck.hasConflict) {
+      scheduleCheck.conflicts.forEach((conflict) => {
+        errors.push(
+          `Jadwal bentrok antara ${conflict.course1} dan ${conflict.course2} (${conflict.time}).`
+        );
+      });
+    }
+  }
+
+  return errors;
+}
 export class AcademicService {
   // Initialization
   static initialize(): void {
     if (!localStorage.getItem(STORAGE_KEYS.STUDENTS)) {
       setStoredItem(STORAGE_KEYS.STUDENTS, MOCK_STUDENTS);
     }
+        // Migrasi NIM mahasiswa lama ke format NIM baru
+    const nimReplacements: Record<string, string> = {
+      '105022110001': '12410619',
+      '105022110002': '12410002',
+      '105022110003': '12410003',
+      '105022110004': '12410004',
+      '105022110005': '12410005',
+    };
+
+    const storageKeys = [
+      STORAGE_KEYS.STUDENTS,
+      STORAGE_KEYS.CLASSES,
+      STORAGE_KEYS.COURSES,
+      STORAGE_KEYS.STUDY_PLANS,
+      STORAGE_KEYS.ADD_DROP_REQUESTS,
+      STORAGE_KEYS.ATTENDANCES,
+      STORAGE_KEYS.CONSULTATIONS,
+      STORAGE_KEYS.NOTIFICATIONS,
+      STORAGE_KEYS.AUDIT_LOGS,
+      STORAGE_KEYS.GRADES,
+    ];
+
+    storageKeys.forEach((key) => {
+      const storedData = localStorage.getItem(key);
+
+      if (!storedData) return;
+
+      let updatedData = storedData;
+
+      Object.entries(nimReplacements).forEach(([oldNim, newNim]) => {
+        updatedData = updatedData.split(oldNim).join(newNim);
+      });
+
+      if (updatedData !== storedData) {
+        localStorage.setItem(key, updatedData);
+      }
+    });
 
     if (!localStorage.getItem(STORAGE_KEYS.COURSES)) {
       setStoredItem(STORAGE_KEYS.COURSES, MOCK_COURSES);
@@ -320,6 +488,8 @@ export class AcademicService {
         letterGrade: letter,
         gradePoint: point,
         isPassed,
+        inputSource: 'lecturer',
+        verificationStatus: 'approved',
         updatedAt: now,
       };
 
@@ -331,54 +501,8 @@ export class AcademicService {
 
       savedRecords.push(gradeRecord);
 
-      // Recalculate student GPA, IPS, and earned credits
-      const studentGrades = allGrades.filter(
-        (grade) => grade.studentId === input.studentId
-      );
-
-      const totalCredits = studentGrades.reduce(
-        (sum, grade) => sum + grade.credits,
-        0
-      );
-
-      const totalPoints = studentGrades.reduce(
-        (sum, grade) => sum + grade.gradePoint * grade.credits,
-        0
-      );
-
-      const newGpa =
-        totalCredits > 0
-          ? Number((totalPoints / totalCredits).toFixed(2))
-          : 0;
-
-      const passedCredits = studentGrades
-        .filter((grade) => grade.isPassed)
-        .reduce((sum, grade) => sum + grade.credits, 0);
-
-      const sem5Grades = studentGrades.filter(
-        (grade) => grade.semester === 5
-      );
-
-      const sem5Credits = sem5Grades.reduce(
-        (sum, grade) => sum + grade.credits,
-        0
-      );
-
-      const sem5Points = sem5Grades.reduce(
-        (sum, grade) => sum + grade.gradePoint * grade.credits,
-        0
-      );
-
-      const newIps =
-        sem5Credits > 0
-          ? Number((sem5Points / sem5Credits).toFixed(2))
-          : newGpa;
-
-      this.updateStudent(input.studentId, {
-        cumulativeGpa: newGpa,
-        lastSemesterGpa: newIps,
-        creditsEarned: passedCredits,
-      });
+      // Recalculate student GPA, IPS, and earned credits secara konsisten menggunakan aturan latest attempt
+      this.recalculateStudentMetrics(input.studentId);
 
       // Send notification to student
       const student = this.getStudentById(input.studentId);
@@ -409,10 +533,594 @@ export class AcademicService {
     return savedRecords;
   }
 
+  /**
+   * Menghitung ulang metrik akademik mahasiswa (IPK, IPS, dan SKS Lulus)
+   * menggunakan aturan NILAI TERBARU (latest attempt) dari nilai resmi.
+   * Nilai mandiri berstatus pending atau rejected diabaikan dari perhitungan.
+   */
+  static recalculateStudentMetrics(studentId: string): void {
+    const allGrades = this.getAllGrades();
+    const studentGrades = allGrades.filter(
+      (grade) => grade.studentId === studentId && isOfficialGrade(grade)
+    );
+
+    // Kumpulkan HANYA percobaan resmi terbaru (latest attempt) untuk setiap mata kuliah
+    const latestRecords = getLatestOfficialAttempts(studentGrades);
+
+    // SKS lulus dihitung berdasarkan status kelulusan dari percobaan terbaru
+    const passedCredits = latestRecords
+      .filter((g) => g.isPassed && PASSING_GRADES.includes(g.letterGrade))
+      .reduce((sum, g) => sum + g.credits, 0);
+
+    // IPK Kumulatif dihitung dari seluruh percobaan terbaru
+    const newGpa = calculateCumulativeGPA(studentGrades) ?? 0;
+
+    const student = this.getStudentById(studentId);
+    const lastSem = student?.currentSemester ? student.currentSemester - 1 : 4;
+    const lastSemGrades = studentGrades.filter(
+      (g) => g.semester === lastSem && g.letterGrade !== 'IP' && g.letterGrade in GRADE_POINTS_SCALE
+    );
+    const lastSemCredits = lastSemGrades.reduce((sum, g) => sum + g.credits, 0);
+    const lastSemPoints = lastSemGrades.reduce(
+      (sum, g) => sum + (GRADE_POINTS_SCALE[g.letterGrade] ?? 0) * g.credits,
+      0
+    );
+    const newIps = lastSemCredits > 0 ? Number((lastSemPoints / lastSemCredits).toFixed(2)) : newGpa;
+
+    this.updateStudent(studentId, {
+      cumulativeGpa: newGpa,
+      lastSemesterGpa: newIps,
+      creditsEarned: passedCredits,
+    });
+  }
+
+  /**
+   * Menambahkan input nilai mandiri oleh mahasiswa pada riwayat akademik.
+   * - Otomatis mengambil kode MK, nama, dan SKS dari katalog kurikulum.
+   * - Mencegah duplikasi mata kuliah pada semester dan tahun akademik yang sama.
+   * - Status verifikasi awal: 'pending' (Menunggu Verifikasi).
+   * - inputSource: 'student'.
+   */
+  static addStudentGradeRecord(input: StudentGradeInput): GradeRecord {
+    const courses = this.getCourses();
+    const course = courses.find(
+      (c) => c.id === input.courseId || c.code.toLowerCase() === input.courseId.toLowerCase()
+    );
+
+    if (!course) {
+      throw new Error('Mata kuliah tidak ditemukan dalam daftar kurikulum.');
+    }
+
+    const allGrades = this.getAllGrades();
+
+    // Validasi pencegahan duplikasi: MK yang sama pada semester dan tahun akademik yang sama
+    const isDuplicate = allGrades.some(
+      (g) =>
+        g.studentId === input.studentId &&
+        (g.courseId === course.id || g.courseCode.toLowerCase() === course.code.toLowerCase()) &&
+        g.semester === Number(input.semester) &&
+        g.academicYear.trim().toLowerCase() === input.academicYear.trim().toLowerCase()
+    );
+
+    if (isDuplicate) {
+      throw new Error(
+        `Mata kuliah ${course.code} (${course.name}) sudah pernah diambil pada Semester ${input.semester} Tahun Akademik ${input.academicYear}.`
+      );
+    }
+
+    const point = GRADE_POINTS_SCALE[input.letterGrade] ?? 0.0;
+    const isPassed = PASSING_GRADES.includes(input.letterGrade);
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    const newRecord: GradeRecord = {
+      id: `grd_std_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      studentId: input.studentId,
+      courseId: course.id,
+      courseCode: course.code,
+      courseName: course.name,
+      credits: course.credits,
+      semester: Number(input.semester),
+      academicYear: input.academicYear.trim(),
+      letterGrade: input.letterGrade,
+      gradePoint: point,
+      isPassed,
+      inputSource: 'student',
+      verificationStatus: 'pending',
+      updatedAt: now,
+    };
+
+    allGrades.push(newRecord);
+    setStoredItem(STORAGE_KEYS.GRADES, allGrades);
+
+    const student = this.getStudentById(input.studentId);
+    const studentName = student?.name || 'Mahasiswa';
+
+    this.addAuditLog(
+      studentName,
+      'student',
+      'INPUT_MANDIRI_NILAI',
+      `Mahasiswa mengajukan input mandiri nilai ${course.code} - ${course.name} (${input.letterGrade}) untuk Semester ${input.semester} ${input.academicYear} (Menunggu Verifikasi).`
+    );
+
+    if (student) {
+      this.addNotification({
+        id: `notif_${Date.now()}_${input.studentId}`,
+        userId: student.userId,
+        title: 'Pengajuan Nilai Mandiri Terkirim',
+        message: `Pengajuan nilai mata kuliah ${course.code} (${course.name}) Semester ${input.semester} telah tersimpan dan menunggu verifikasi Dosen Pembina Akademik.`,
+        type: 'info',
+        link: '/student/academic-history',
+        read: false,
+        createdAt: 'Baru saja',
+      });
+    }
+
+    return newRecord;
+  }
+
+  /**
+   * Memproses verifikasi nilai mandiri oleh Dosen PA / Akademik.
+   * - Status 'approved': nilai resmi diakui dan langsung masuk perhitungan IPK, IPS, dan SKS lulus.
+   * - Status 'rejected': nilai ditolak dan tidak masuk perhitungan akademik resmi.
+   */
+  static verifyGradeRecord(
+    gradeId: string,
+    status: 'approved' | 'rejected',
+    notes?: string,
+    verifiedBy: string = 'Semmy W. Taju, S.Kom., M.S., Ph.D.'
+  ): GradeRecord | null {
+    const allGrades = this.getAllGrades();
+    const index = allGrades.findIndex((g) => g.id === gradeId);
+
+    if (index === -1) {
+      throw new Error('Data nilai tidak ditemukan.');
+    }
+
+    const record = allGrades[index];
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
+    allGrades[index] = {
+      ...record,
+      verificationStatus: status,
+      updatedAt: now,
+    };
+
+    setStoredItem(STORAGE_KEYS.GRADES, allGrades);
+
+    // Jika disetujui, perbarui metrik IPK, IPS, dan SKS lulus mahasiswa
+    if (status === 'approved') {
+      this.recalculateStudentMetrics(record.studentId);
+    }
+
+    const student = this.getStudentById(record.studentId);
+    const statusLabel = status === 'approved' ? 'DISETUJUI' : 'DITOLAK';
+
+    this.addAuditLog(
+      verifiedBy,
+      'lecturer',
+      'VERIFIKASI_NILAI_MANDIRI',
+      `Verifikasi nilai mandiri ${record.courseCode} (${record.courseName}) untuk mahasiswa ${student?.name || record.studentId}: ${statusLabel}.${notes ? ` Catatan: ${notes}` : ''}`
+    );
+
+    if (student) {
+      this.addNotification({
+        id: `notif_${Date.now()}_${record.studentId}`,
+        userId: student.userId,
+        title: status === 'approved' ? 'Nilai Mandiri Disetujui' : 'Nilai Mandiri Ditolak',
+        message:
+          status === 'approved'
+            ? `Pengajuan nilai mandiri ${record.courseCode} (${record.courseName}) telah DISETUJUI dan kini resmi masuk perhitungan akademik.`
+            : `Pengajuan nilai mandiri ${record.courseCode} (${record.courseName}) DITOLAK.${notes ? ` Alasan: ${notes}` : ''}`,
+        type: status === 'approved' ? 'success' : 'danger',
+        link: '/student/academic-history',
+        read: false,
+        createdAt: 'Baru saja',
+      });
+    }
+
+    return allGrades[index];
+  }
+
+  /**
+   * Menghapus catatan nilai mandiri mahasiswa yang masih pending
+   */
+  static deleteStudentGradeRecord(gradeId: string, studentId: string): boolean {
+    const allGrades = this.getAllGrades();
+    const index = allGrades.findIndex((g) => g.id === gradeId && g.studentId === studentId);
+
+    if (index === -1) return false;
+
+    const [deleted] = allGrades.splice(index, 1);
+    setStoredItem(STORAGE_KEYS.GRADES, allGrades);
+
+    if (deleted.verificationStatus === 'approved') {
+      this.recalculateStudentMetrics(studentId);
+    }
+
+    return true;
+  }
+
   static resetGradesToDefault(): void {
     setStoredItem(STORAGE_KEYS.GRADES, MOCK_INITIAL_GRADES);
   }
 
+  // ============================================
+// ADD & DROP MATA KULIAH
+// ============================================
+
+static getAddDropRequests(studentId?: string): AddDropRequest[] {
+  const requests = getStoredItem<AddDropRequest[]>(
+    STORAGE_KEYS.ADD_DROP_REQUESTS,
+    []
+  );
+
+  return studentId
+    ? requests.filter((request) => request.studentId === studentId)
+    : requests;
+}
+
+static submitAddDropRequest(
+  studentId: string,
+  type: 'add' | 'drop',
+  classOrItemId: string,
+  reason: string
+): AddDropRequest {
+  const student = this.getStudentById(studentId);
+
+  if (!student) {
+    throw new Error('Data mahasiswa tidak ditemukan.');
+  }
+
+  const plan = this.getStudyPlanByStudentId(studentId);
+
+  if (!plan || plan.status !== 'approved') {
+    throw new Error('Add & Drop hanya dapat dilakukan setelah KRS disetujui.');
+  }
+
+  if (!reason.trim()) {
+    throw new Error('Alasan pengajuan wajib diisi.');
+  }
+
+  const requests = this.getAddDropRequests();
+  let courseItem: StudyPlanItem;
+
+  if (type === 'add') {
+    const selectedClass = this.getClasses().find(
+      (item) => item.id === classOrItemId
+    );
+
+    if (!selectedClass) {
+      throw new Error('Kelas yang dipilih tidak ditemukan.');
+    }
+
+    if (
+      plan.items.some(
+        (item) =>
+          item.classId === selectedClass.id ||
+          item.courseId === selectedClass.courseId
+      )
+    ) {
+      throw new Error('Mata kuliah tersebut sudah ada dalam KRS.');
+    }
+
+    if (selectedClass.enrolled >= selectedClass.capacity) {
+      throw new Error('Kelas sudah mencapai kapasitas maksimum.');
+    }
+
+    if (
+      requests.some(
+        (request) =>
+          request.studyPlanId === plan.id &&
+          request.type === 'add' &&
+          request.status === 'submitted' &&
+          request.courseItem.classId === selectedClass.id
+      )
+    ) {
+      throw new Error('Pengajuan penambahan kelas ini masih menunggu persetujuan.');
+    }
+
+    courseItem = {
+      id: `add_${Date.now()}`,
+      studyPlanId: plan.id,
+      classId: selectedClass.id,
+      courseId: selectedClass.courseId,
+      courseCode: selectedClass.courseCode,
+      courseName: selectedClass.courseName,
+      credits: selectedClass.credits,
+      section: selectedClass.section,
+      day: selectedClass.day,
+      startTime: selectedClass.startTime,
+      endTime: selectedClass.endTime,
+      room: selectedClass.room,
+      lecturerName: selectedClass.lecturerName,
+      status: 'submitted',
+    };
+
+    const grades = this.getGradesByStudentId(studentId);
+    const latestGrades = getLatestOfficialAttempts(grades);
+
+    const passedCourseIds = latestGrades
+      .filter(
+        (grade) =>
+          grade.isPassed &&
+          PASSING_GRADES.includes(grade.letterGrade)
+      )
+      .map((grade) => grade.courseId);
+
+    const maxCreditLimit = calculateMaxCreditLimit(
+      calculateCumulativeGPA(grades)
+    );
+
+    const allClasses = this.getClasses();
+
+    const proposedClasses = [
+      ...plan.items.map((item) => {
+        const existingClass = allClasses.find(
+          (cls) => cls.id === item.classId
+        );
+
+        if (!existingClass) {
+          throw new Error(`Kelas ${item.courseCode} tidak ditemukan.`);
+        }
+
+        return existingClass;
+      }),
+      selectedClass,
+    ];
+
+    const validationErrors = validateAddDropAddition(
+      plan,
+      selectedClass,
+      grades,
+      allClasses,
+      this.getCourses()
+    );
+
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join('\n'));
+    }
+  } else {
+    const existingItem = plan.items.find(
+      (item) =>
+        item.id === classOrItemId ||
+        item.classId === classOrItemId
+    );
+
+    if (!existingItem) {
+      throw new Error('Mata kuliah tidak ditemukan dalam KRS.');
+    }
+
+    if (
+      requests.some(
+        (request) =>
+          request.studyPlanId === plan.id &&
+          request.type === 'drop' &&
+          request.status === 'submitted' &&
+          request.courseItem.id === existingItem.id
+      )
+    ) {
+      throw new Error('Pengajuan penghapusan mata kuliah ini masih menunggu persetujuan.');
+    }
+
+    courseItem = { ...existingItem };
+  }
+
+  const request: AddDropRequest = {
+    id: `adddrop_${Date.now()}`,
+    studyPlanId: plan.id,
+    studentId: student.id,
+    studentNim: student.nim,
+    studentName: student.name,
+    academicYear: plan.academicYear,
+    semester: plan.semester,
+    type,
+    courseItem,
+    status: 'submitted',
+    reason: reason.trim(),
+    submittedAt: new Date().toISOString(),
+  };
+
+  requests.push(request);
+
+  setStoredItem(STORAGE_KEYS.ADD_DROP_REQUESTS, requests);
+
+  const advisor = this.getLecturerById(student.academicAdvisorId);
+
+  this.addNotification({
+    id: `notif_${Date.now()}`,
+    userId: advisor?.userId || student.academicAdvisorId,
+    title: 'Pengajuan Add & Drop Baru',
+    message: `${student.name} mengajukan ${
+      type === 'add' ? 'penambahan' : 'penghapusan'
+    } ${courseItem.courseCode} - ${courseItem.courseName}.`,
+    type: 'warning',
+    link: '/lecturer/krs-approval',
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
+
+  this.addAuditLog(
+    student.name,
+    'student',
+    type === 'add' ? 'SUBMIT_ADD_COURSE' : 'SUBMIT_DROP_COURSE',
+    `Mengajukan ${type === 'add' ? 'penambahan' : 'penghapusan'} ${courseItem.courseCode}. Alasan: ${reason}`
+  );
+
+  return request;
+}
+
+static reviewAddDropRequest(
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  reviewerId: string,
+  reviewerName: string,
+  feedback: string = ''
+): void {
+  const requests = this.getAddDropRequests();
+
+  const request = requests.find((item) => item.id === requestId);
+
+  if (!request) {
+    throw new Error('Pengajuan Add & Drop tidak ditemukan.');
+  }
+
+  if (request.status !== 'submitted') {
+    throw new Error('Pengajuan ini sudah pernah diproses.');
+  }
+
+  const student = this.getStudentById(request.studentId);
+
+  if (!student) {
+    throw new Error('Data mahasiswa tidak ditemukan.');
+  }
+
+  const advisor = this.getLecturerById(student.academicAdvisorId);
+
+  if (
+    !advisor ||
+    (advisor.id !== reviewerId && advisor.userId !== reviewerId)
+  ) {
+    throw new Error('Hanya dosen wali mahasiswa yang dapat memproses pengajuan ini.');
+  }
+
+  const plans = this.getStudyPlans();
+  const plan = plans.find((item) => item.id === request.studyPlanId);
+
+  if (!plan || plan.status !== 'approved') {
+    throw new Error('KRS tidak ditemukan atau tidak lagi berstatus disetujui.');
+  }
+
+  if (decision === 'approved') {
+    const classes = this.getClasses();
+
+    const targetClass = classes.find(
+      (item) => item.id === request.courseItem.classId
+    );
+
+    if (!targetClass) {
+      throw new Error('Data kelas tidak ditemukan.');
+    }
+
+    if (request.type === 'add') {
+      if (
+        plan.items.some(
+          (item) => item.courseId === request.courseItem.courseId
+        )
+      ) {
+        throw new Error('Mata kuliah tersebut sudah ada dalam KRS.');
+      }
+
+      if (targetClass.enrolled >= targetClass.capacity) {
+        throw new Error('Kapasitas kelas sudah penuh.');
+      }
+
+      const grades = this.getGradesByStudentId(request.studentId);
+      const latestGrades = getLatestOfficialAttempts(grades);
+
+      const passedCourseIds = latestGrades
+        .filter(
+          (grade) =>
+            grade.isPassed &&
+            PASSING_GRADES.includes(grade.letterGrade)
+        )
+        .map((grade) => grade.courseId);
+
+      const maxCreditLimit = calculateMaxCreditLimit(
+        calculateCumulativeGPA(grades)
+      );
+
+      const proposedClasses = [
+        ...plan.items.map((item) => {
+          const existingClass = classes.find(
+            (cls) => cls.id === item.classId
+          );
+
+          if (!existingClass) {
+            throw new Error(`Kelas ${item.courseCode} tidak ditemukan.`);
+          }
+
+          return existingClass;
+        }),
+        targetClass,
+      ];
+
+      const validationErrors = validateAddDropAddition(
+        plan,
+        targetClass,
+        grades,
+        classes,
+        this.getCourses()
+      );
+
+      if (validationErrors.length > 0) {
+        throw new Error(validationErrors.join('\n'));
+      }
+
+      plan.items.push({
+        ...request.courseItem,
+        status: 'approved',
+      });
+
+      targetClass.enrolled += 1;
+    } else {
+      const itemIndex = plan.items.findIndex(
+        (item) => item.id === request.courseItem.id
+      );
+
+      if (itemIndex === -1) {
+        throw new Error('Mata kuliah tidak lagi ditemukan dalam KRS.');
+      }
+
+      plan.items.splice(itemIndex, 1);
+      targetClass.enrolled = Math.max(0, targetClass.enrolled - 1);
+    }
+
+    plan.totalCredits = plan.items.reduce(
+      (total, item) => total + item.credits,
+      0
+    );
+
+    setStoredItem(STORAGE_KEYS.STUDY_PLANS, plans);
+    setStoredItem(STORAGE_KEYS.CLASSES, classes);
+
+    this.updateStudent(request.studentId, {
+      creditsCurrent: plan.totalCredits,
+      krsStatus: 'approved',
+    });
+  }
+
+  request.status = decision;
+  request.reviewedAt = new Date().toISOString();
+  request.reviewerId = reviewerId;
+  request.reviewerName = reviewerName;
+  request.feedback = feedback;
+
+  setStoredItem(STORAGE_KEYS.ADD_DROP_REQUESTS, requests);
+
+  this.addNotification({
+    id: `notif_${Date.now()}`,
+    userId: student.userId || student.id,
+    title:
+      decision === 'approved'
+        ? 'Pengajuan Add & Drop Disetujui'
+        : 'Pengajuan Add & Drop Ditolak',
+    message:
+      `${request.courseItem.courseCode} - ${request.courseItem.courseName}: ` +
+      `${decision === 'approved' ? 'pengajuan disetujui' : 'pengajuan ditolak'}.` +
+      (feedback ? ` Catatan dosen: ${feedback}` : ''),
+    type: decision === 'approved' ? 'success' : 'danger',
+    link: '/student/study-plan',
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
+
+  this.addAuditLog(
+    reviewerName,
+    'lecturer',
+    decision === 'approved' ? 'APPROVE_ADD_DROP' : 'REJECT_ADD_DROP',
+    `${decision === 'approved' ? 'Menyetujui' : 'Menolak'} pengajuan ${request.type.toUpperCase()} ${request.courseItem.courseCode} milik ${student.name} (${student.nim}).`
+  );
+}
   // Study Plans (KRS)
   static getStudyPlans(): StudyPlan[] {
     return getStoredItem<StudyPlan[]>(
@@ -669,6 +1377,41 @@ export class AcademicService {
       decision === 'approved' ? 'APPROVE_KRS' : 'REVISE_KRS',
       `${decision === 'approved' ? 'Menyetujui' : 'Meminta revisi'} KRS mahasiswa ${plan.studentName} (${plan.studentNim})`
     );
+  }
+    static saveAttendanceRecords(records: AttendanceRecord[]): void {
+    const list = this.getAttendances();
+
+    records.forEach((record) => {
+      const existingIndex = list.findIndex(
+        (item) =>
+          item.id === record.id ||
+          (
+            item.classId === record.classId &&
+            item.studentId === record.studentId &&
+            item.meetingNumber === record.meetingNumber &&
+            item.date === record.date
+          )
+      );
+
+      if (existingIndex !== -1) {
+        const existing = list[existingIndex];
+
+        list[existingIndex] = {
+          ...existing,
+          ...record,
+          correctionRequested:
+            record.correctionRequested ?? existing.correctionRequested,
+          correctionReason:
+            record.correctionReason ?? existing.correctionReason,
+          correctionStatus:
+            record.correctionStatus ?? existing.correctionStatus,
+        };
+      } else {
+        list.push(record);
+      }
+    });
+
+    setStoredItem(STORAGE_KEYS.ATTENDANCES, list);
   }
 
   // Attendance

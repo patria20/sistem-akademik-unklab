@@ -20,6 +20,18 @@ export const PASSING_GRADES: string[] = [
 
 export const DEFAULT_GRADUATION_TARGET = 151;
 
+/**
+ * Memeriksa apakah nilai merupakan nilai resmi yang diakui dalam perhitungan akademik.
+ * Nilai lama tanpa verificationStatus atau nilai dosen dianggap resmi (kompatibel).
+ * Nilai mandiri yang berstatus 'pending' atau 'rejected' TIDAK masuk perhitungan akademik resmi.
+ */
+export function isOfficialGrade(record: GradeRecord): boolean {
+  if (record.verificationStatus === 'pending' || record.verificationStatus === 'rejected') {
+    return false;
+  }
+  return true;
+}
+
 /** Menghitung bobot nilai dikalikan SKS. */
 export function calculateQualityPoints(
   letterGrade: string,
@@ -38,10 +50,74 @@ export function calculateQualityPoints(
   return gradePoint * credits;
 }
 
-/** Menghitung IPS dari kumpulan nilai satu semester. */
+/**
+ * Menghitung urutan kronologis periode akademik (tahun akademik & semester).
+ * Format tahun ajaran contoh: '2024/2025 Ganjil', '2024/2025 Genap'.
+ * Angka yang lebih besar menunjukkan periode yang lebih baru (latest attempt).
+ */
+export function getPeriodOrder(academicYear: string, semester: number): number {
+  const match = (academicYear || '').match(/(\d{4})/);
+  const startYear = match ? parseInt(match[1], 10) : 2020;
+  const isGenap = (academicYear || '').toLowerCase().includes('genap') ? 1 : 0;
+  return startYear * 1000 + isGenap * 100 + (semester || 0);
+}
+
+/**
+ * Membandingkan dua percobaan nilai berdasarkan periode terbaru.
+ * Mengembalikan nilai negatif jika b lebih baru daripada a (untuk sort descending).
+ */
+export function compareAttemptsByLatest(a: GradeRecord, b: GradeRecord): number {
+  const orderB = getPeriodOrder(b.academicYear, b.semester);
+  const orderA = getPeriodOrder(a.academicYear, a.semester);
+  if (orderB !== orderA) {
+    return orderB - orderA;
+  }
+  const byUpdated = (b.updatedAt || '').localeCompare(a.updatedAt || '');
+  if (byUpdated !== 0) return byUpdated;
+  return b.id.localeCompare(a.id);
+}
+
+/**
+ * Mengelompokkan riwayat nilai dan mengambil HANYA percobaan resmi terbaru (latest attempt)
+ * untuk setiap mata kuliah.
+ * - Nilai pending / rejected tidak pernah diakui sebagai percobaan resmi.
+ * - Nilai lama tanpa verificationStatus tetap diakui sebagai resmi.
+ * - Jika mata kuliah diulang, hanya nilai pada periode terbaru yang diambil,
+ *   meskipun nilai terbaru tersebut lebih rendah atau tidak lulus.
+ */
+export function getLatestOfficialAttempts(records: GradeRecord[]): GradeRecord[] {
+  const officialRecords = records.filter(isOfficialGrade);
+  const byCourse = new Map<string, GradeRecord[]>();
+
+  for (const r of officialRecords) {
+    const key = (r.courseCode || r.courseId).trim().toUpperCase();
+    byCourse.set(key, [...(byCourse.get(key) ?? []), r]);
+  }
+
+  const latestRecords: GradeRecord[] = [];
+  for (const attempts of byCourse.values()) {
+    const [latest] = [...attempts].sort((a, b) => {
+      // Prioritaskan nilai yang sudah keluar huruf mutu daripada 'IP' (sedang berjalan)
+      const aGraded = a.letterGrade !== 'IP' && a.letterGrade in GRADE_POINTS_SCALE;
+      const bGraded = b.letterGrade !== 'IP' && b.letterGrade in GRADE_POINTS_SCALE;
+      if (aGraded !== bGraded) return aGraded ? -1 : 1;
+
+      return compareAttemptsByLatest(a, b);
+    });
+
+    if (latest) {
+      latestRecords.push(latest);
+    }
+  }
+
+  return latestRecords;
+}
+
+/** Menghitung IPS dari kumpulan nilai satu semester (hanya nilai resmi/disetujui). */
 export function calculateSemesterGPA(records: GradeRecord[]): number {
   const gradedRecords = records.filter(
     (record) =>
+      isOfficialGrade(record) &&
       record.letterGrade !== 'IP' &&
       record.letterGrade in GRADE_POINTS_SCALE &&
       record.credits > 0
@@ -63,11 +139,16 @@ export function calculateSemesterGPA(records: GradeRecord[]): number {
   return Number((totalQualityPoints / totalCredits).toFixed(2));
 }
 
-/** Menghitung IPK dari seluruh nilai yang memiliki huruf mutu. */
+/**
+ * Menghitung IPK kumulatif menggunakan aturan NILAI TERBARU (latest attempt).
+ * Jika suatu mata kuliah diambil lebih dari sekali, hanya percobaan terbaru
+ * yang masuk ke dalam perhitungan IPK.
+ */
 export function calculateCumulativeGPA(
   records: GradeRecord[]
 ): number | null {
-  const gradedRecords = records.filter(
+  const latestRecords = getLatestOfficialAttempts(records);
+  const gradedRecords = latestRecords.filter(
     (record) =>
       record.letterGrade !== 'IP' &&
       record.letterGrade in GRADE_POINTS_SCALE &&
@@ -106,7 +187,11 @@ export function calculateMaxCreditLimit(
     : 20;
 }
 
-/** Menghitung ringkasan progres kurikulum. */
+/**
+ * Menghitung ringkasan progres kurikulum:
+ * - Menggunakan percobaan terbaru (latest attempt) untuk setiap mata kuliah.
+ * - SKS Lulus dihitung berdasarkan status kelulusan dari percobaan terbaru.
+ */
 export function calculateAcademicProgress(
   allRecords: GradeRecord[],
   currentEnrolledCredits = 0,
@@ -117,21 +202,18 @@ export function calculateAcademicProgress(
       ? graduationTarget
       : DEFAULT_GRADUATION_TARGET;
 
-  // Simpan satu nilai lulus untuk setiap mata kuliah.
-  const passedByCourse = new Map<string, GradeRecord>();
+  // Mengambil HANYA percobaan resmi terbaru untuk setiap mata kuliah
+  const latestRecords = getLatestOfficialAttempts(allRecords);
 
-  allRecords.forEach((record) => {
-    if (
+  // SKS lulus hanya diakui jika percobaan TERBARU dinyatakan lulus (C ke atas)
+  const passedLatestRecords = latestRecords.filter(
+    (record) =>
       record.isPassed &&
       PASSING_GRADES.includes(record.letterGrade) &&
-      record.credits > 0 &&
-      !passedByCourse.has(record.courseId)
-    ) {
-      passedByCourse.set(record.courseId, record);
-    }
-  });
+      record.credits > 0
+  );
 
-  const creditsEarned = Array.from(passedByCourse.values()).reduce(
+  const creditsEarned = passedLatestRecords.reduce(
     (sum, record) => sum + record.credits,
     0
   );

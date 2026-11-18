@@ -1,3 +1,4 @@
+
 export const ACADEMIC_MODULE_NAME = 'SIAM_UNKLAB_ACADEMIC_SYSTEM';
 
 export type UserRole = 'student' | 'lecturer';
@@ -10,7 +11,7 @@ export interface User {
   role: UserRole;
   avatar: string;
   phone?: string;
-  identityNumber: string; // NIM for student, NIDN for lecturer
+  identityNumber: string;
 }
 
 export interface StudentProfile {
@@ -55,7 +56,7 @@ export interface Course {
   credits: number;
   semester: number;
   curriculumYear: number;
-  prerequisites: string[]; // Course IDs that must be completed
+  prerequisites: string[];
   isMandatory: boolean;
   category: 'Wajib Prodi' | 'Wajib Universitas' | 'Pilihan' | 'Tugas Akhir';
   description: string;
@@ -67,12 +68,12 @@ export interface CourseClass {
   courseCode: string;
   courseName: string;
   credits: number;
-  section: string; // 'A', 'B', 'C'
+  section: string;
   lecturerId: string;
   lecturerName: string;
   day: 'Senin' | 'Selasa' | 'Rabu' | 'Kamis' | 'Jumat';
-  startTime: string; // '08:00'
-  endTime: string; // '10:30'
+  startTime: string;
+  endTime: string;
   room: string;
   capacity: number;
   enrolled: number;
@@ -93,6 +94,25 @@ export interface StudyPlanItem {
   room: string;
   lecturerName: string;
   status: 'draft' | 'submitted' | 'approved' | 'revision' | 'rejected';
+}
+
+export interface AddDropRequest {
+  id: string;
+  studyPlanId: string;
+  studentId: string;
+  studentNim: string;
+  studentName: string;
+  academicYear: string;
+  semester: number;
+  type: 'add' | 'drop';
+  courseItem: StudyPlanItem;
+  status: 'submitted' | 'approved' | 'rejected';
+  reason: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  reviewerId?: string;
+  reviewerName?: string;
+  feedback?: string;
 }
 
 export interface StudyPlan {
@@ -120,7 +140,7 @@ export interface GradeRecord {
   credits: number;
   semester: number;
   academicYear: string;
-  score?: number; // 0 - 100
+  score?: number;
   componentScores?: {
     tugas: number;
     uts: number;
@@ -129,8 +149,10 @@ export interface GradeRecord {
   classId?: string;
   lecturerName?: string;
   letterGrade: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+' | 'C' | 'D' | 'F' | 'IP';
-  gradePoint: number; // 4.0, 3.75, 3.5, etc.
+  gradePoint: number;
   isPassed: boolean;
+  verificationStatus?: 'pending' | 'approved' | 'rejected';
+  inputSource?: 'student' | 'lecturer' | 'system';
   updatedAt?: string;
 }
 
@@ -141,9 +163,9 @@ export interface AttendanceRecord {
   studentName: string;
   classId: string;
   courseName: string;
-  meetingNumber: number; // 1 to 16
+  meetingNumber: number;
   date: string;
-  status: 'hadir' | 'izin' | 'sakit' | 'alpa';
+  status: 'hadir' | 'terlambat' | 'izin' | 'sakit' | 'alpa';
   correctionRequested?: boolean;
   correctionReason?: string;
   correctionStatus?: 'none' | 'pending' | 'approved' | 'rejected';

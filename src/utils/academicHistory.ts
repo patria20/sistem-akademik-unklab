@@ -1,9 +1,14 @@
 import type { GradeRecord } from '../types/academic';
-import { GRADE_POINTS_SCALE, PASSING_GRADES, calculateSemesterGPA } from './gpaCalculator';
+import {
+  PASSING_GRADES,
+  calculateSemesterGPA,
+  isOfficialGrade,
+  getLatestOfficialAttempts,
+} from './gpaCalculator';
 
 export interface HistoryRow {
   record: GradeRecord;
-  /** false jika mata kuliah ini diulang dan percobaan lain yang dipakai untuk IPK dan SKS lulus. */
+  /** false jika mata kuliah ini diulang dan percobaan terbaru yang dipakai untuk IPK dan SKS lulus, atau belum diverifikasi. */
   countedInCumulative: boolean;
 }
 
@@ -24,46 +29,29 @@ export interface AcademicHistory {
   cumulativeGpa: number;
 }
 
-const isGraded = (r: GradeRecord) => r.letterGrade !== 'IP' && r.letterGrade in GRADE_POINTS_SCALE;
-
 /**
- * ATURAN PENGULANGAN MATA KULIAH (keputusan: nilai terbaik):
- * jika satu mata kuliah diambil lebih dari sekali, hanya NILAI TERBAIK yang dipakai untuk IPK
- * dan SKS lulus. Jika nilainya sama, dipakai percobaan yang paling baru.
+ * ATURAN PENGULANGAN MATA KULIAH (keputusan: nilai terbaru / latest attempt):
+ * Jika satu mata kuliah diambil lebih dari sekali, HANYA PERCOBAAN TERBARU yang dipakai untuk
+ * IPK kumulatif dan SKS lulus (berdasarkan tahun akademik dan semester pengambilan).
+ * Jika nilai terbaru lebih rendah daripada nilai sebelumnya, tetap gunakan nilai terbaru.
  * Semua percobaan tetap ditampilkan di semester pengambilannya masing-masing.
- * Untuk memakai aturan "nilai terakhir", ubah urutan sort di bawah menjadi tahun akademik
- * dan semester terbaru lebih dulu.
+ * Nilai mandiri yang belum disetujui (pending/rejected) tidak boleh menggantikan nilai resmi yang sudah ada.
  *
- * Mengembalikan kumpulan id nilai yang dihitung.
+ * Mengembalikan kumpulan id nilai resmi terbaru yang dihitung.
  */
 export function pickCountedAttempts(records: GradeRecord[]): Set<string> {
-  const byCourse = new Map<string, GradeRecord[]>();
-  for (const r of records) {
-    byCourse.set(r.courseId, [...(byCourse.get(r.courseId) ?? []), r]);
-  }
-
-  const counted = new Set<string>();
-  for (const attempts of byCourse.values()) {
-    const [best] = [...attempts].sort((a, b) => {
-      if (isGraded(a) !== isGraded(b)) return isGraded(a) ? -1 : 1;
-      const byPoint = (GRADE_POINTS_SCALE[b.letterGrade] ?? 0) - (GRADE_POINTS_SCALE[a.letterGrade] ?? 0);
-      if (byPoint !== 0) return byPoint;
-      const byYear = b.academicYear.localeCompare(a.academicYear);
-      return byYear !== 0 ? byYear : b.semester - a.semester;
-    });
-    counted.add(best.id);
-  }
-  return counted;
+  const latestRecords = getLatestOfficialAttempts(records);
+  return new Set(latestRecords.map((r) => r.id));
 }
 
 /**
  * Menyusun riwayat akademik dari nilai SATU mahasiswa.
- * - Hanya semester sebelum `currentSemester`.
+ * - Mencakup semester sebelum `currentSemester` serta seluruh nilai input mandiri mahasiswa.
  * - Dikelompokkan per (tahun akademik + semester), sehingga semester dengan nomor sama
  *   pada tahun akademik berbeda tidak tercampur.
  */
 export function buildAcademicHistory(grades: GradeRecord[], currentSemester: number): AcademicHistory {
-  const previous = grades.filter((g) => g.semester < currentSemester);
+  const previous = grades.filter((g) => g.semester < currentSemester || g.inputSource === 'student');
   const counted = pickCountedAttempts(previous);
 
   const byKey = new Map<string, GradeRecord[]>();
@@ -78,7 +66,7 @@ export function buildAcademicHistory(grades: GradeRecord[], currentSemester: num
       semester: records[0].semester,
       academicYear: records[0].academicYear,
       rows: records.map((record) => ({ record, countedInCumulative: counted.has(record.id) })),
-      credits: records.reduce((sum, r) => sum + r.credits, 0),
+      credits: records.filter(isOfficialGrade).reduce((sum, r) => sum + r.credits, 0),
       gpa: calculateSemesterGPA(records),
     }))
     .sort((a, b) => a.academicYear.localeCompare(b.academicYear) || a.semester - b.semester);

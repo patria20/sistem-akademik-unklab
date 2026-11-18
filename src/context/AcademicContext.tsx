@@ -12,8 +12,9 @@ import type {
   SystemNotification,
   AuditLog,
   GradeRecord,
+  AddDropRequest,
 } from '../types/academic';
-import { AcademicService, type ClassGradeInput } from '../services/academicService';
+import { AcademicService, type ClassGradeInput, type StudentGradeInput } from '../services/academicService';
 import { useAuth } from './AuthContext';
 
 interface AcademicContextType {
@@ -22,20 +23,42 @@ interface AcademicContextType {
   courses: Course[];
   classes: CourseClass[];
   studyPlans: StudyPlan[];
+  addDropRequests: AddDropRequest[];
   attendances: AttendanceRecord[];
   consultations: ConsultationSession[];
   notifications: SystemNotification[];
   auditLogs: AuditLog[];
   grades: GradeRecord[];
   allGrades: GradeRecord[];
+
   activeStudent: StudentProfile | undefined;
   activeLecturer: LecturerProfile | undefined;
   activeKrs: StudyPlan | undefined;
+
   saveKrsDraft: (items: StudyPlanItem[], notes: string) => StudyPlan;
   submitKrs: (items: StudyPlanItem[], notes: string) => StudyPlan;
-  reviewKrs: (krsId: string, decision: 'approved' | 'revision', feedback: string) => void;
+
+  reviewKrs: (
+    krsId: string,
+    decision: 'approved' | 'revision',
+    feedback: string
+  ) => void;
+
+  submitAddDropRequest: (
+    type: 'add' | 'drop',
+    targetId: string,
+    reason: string
+  ) => AddDropRequest;
+
+  reviewAddDropRequest: (
+    requestId: string,
+    decision: 'approved' | 'rejected',
+    feedback: string
+  ) => void;
+
   requestAttendanceCorrection: (attendanceId: string, reason: string) => void;
   approveAttendanceCorrection: (attendanceId: string, approved: boolean) => void;
+  saveAttendanceRecords: (records: AttendanceRecord[]) => void;
   createConsultation: (lecturerId: string, topic: string, message: string) => void;
   replyConsultation: (id: string, reply: string, scheduledDate?: string) => void;
   markNotificationAsRead: (id: string) => void;
@@ -43,10 +66,16 @@ interface AcademicContextType {
   addNewClass: (cls: CourseClass) => void;
   saveClassGrades: (classId: string, inputs: ClassGradeInput[]) => GradeRecord[];
   getGradesByClassId: (classId: string) => GradeRecord[];
+  addStudentGrade: (input: StudentGradeInput) => GradeRecord;
+  verifyGradeRecord: (
+    gradeId: string,
+    status: 'approved' | 'rejected',
+    notes?: string
+  ) => GradeRecord | null;
+  deleteStudentGrade: (gradeId: string) => boolean;
   resetGradesToDefault: () => void;
   refreshData: () => void;
 }
-
 const AcademicContext = createContext<AcademicContextType | undefined>(undefined);
 
 export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -57,6 +86,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [courses, setCourses] = useState<Course[]>([]);
   const [classes, setClasses] = useState<CourseClass[]>([]);
   const [studyPlans, setStudyPlans] = useState<StudyPlan[]>([]);
+  const [addDropRequests, setAddDropRequests] = useState<AddDropRequest[]>([]);
   const [attendances, setAttendances] = useState<AttendanceRecord[]>([]);
   const [consultations, setConsultations] = useState<ConsultationSession[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
@@ -74,6 +104,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCourses(AcademicService.getCourses());
     setClasses(AcademicService.getClasses());
     setStudyPlans(AcademicService.getStudyPlans());
+    setAddDropRequests(AcademicService.getAddDropRequests());
     setAttendances(AcademicService.getAttendances());
     setConsultations(AcademicService.getConsultations());
     setNotifications(AcademicService.getNotifications());
@@ -138,6 +169,47 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     refreshData();
   };
 
+
+  const handleSubmitAddDropRequest = (
+  type: 'add' | 'drop',
+  targetId: string,
+  reason: string
+): AddDropRequest => {
+  if (!activeStudent) {
+    throw new Error('Data mahasiswa aktif tidak ditemukan.');
+  }
+
+  const result = AcademicService.submitAddDropRequest(
+    activeStudent.id,
+    type,
+    targetId,
+    reason
+  );
+
+  refreshData();
+  return result;
+};
+
+const handleReviewAddDropRequest = (
+  requestId: string,
+  decision: 'approved' | 'rejected',
+  feedback: string
+): void => {
+  if (!activeLecturer) {
+    throw new Error('Data dosen aktif tidak ditemukan.');
+  }
+
+  AcademicService.reviewAddDropRequest(
+    requestId,
+    decision,
+    activeLecturer.id,
+    user?.name || activeLecturer.name,
+    feedback
+  );
+
+  refreshData();
+};
+
   const handleRequestAttendanceCorrection = (
     attendanceId: string,
     reason: string
@@ -151,6 +223,11 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     approved: boolean
   ) => {
     AcademicService.processAttendanceCorrection(attendanceId, approved);
+    refreshData();
+  };
+
+  const handleSaveAttendanceRecords = (records: AttendanceRecord[]) => {
+    AcademicService.saveAttendanceRecords(records);
     refreshData();
   };
 
@@ -231,6 +308,39 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return AcademicService.getGradesByClassId(classId);
   };
 
+  const handleAddStudentGrade = (input: StudentGradeInput) => {
+    const result = AcademicService.addStudentGradeRecord(input);
+    refreshData();
+    return result;
+  };
+
+  const handleVerifyGradeRecord = (
+    gradeId: string,
+    status: 'approved' | 'rejected',
+    notes?: string
+  ) => {
+    const verifierName =
+      user?.name ||
+      activeLecturer?.name ||
+      'Semmy W. Taju, S.Kom., M.S., Ph.D.';
+
+    const result = AcademicService.verifyGradeRecord(
+      gradeId,
+      status,
+      notes,
+      verifierName
+    );
+    refreshData();
+    return result;
+  };
+
+  const handleDeleteStudentGrade = (gradeId: string) => {
+    if (!activeStudent) return false;
+    const ok = AcademicService.deleteStudentGradeRecord(gradeId, activeStudent.id);
+    if (ok) refreshData();
+    return ok;
+  };
+
   const handleResetGradesToDefault = () => {
     AcademicService.resetGradesToDefault();
     refreshData();
@@ -244,6 +354,7 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         courses,
         classes,
         studyPlans,
+        addDropRequests,
         attendances,
         consultations,
         notifications,
@@ -256,8 +367,11 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         saveKrsDraft: handleSaveKrsDraft,
         submitKrs: handleSubmitKrs,
         reviewKrs: handleReviewKrs,
+        submitAddDropRequest: handleSubmitAddDropRequest,
+        reviewAddDropRequest: handleReviewAddDropRequest,
         requestAttendanceCorrection: handleRequestAttendanceCorrection,
         approveAttendanceCorrection: handleApproveAttendanceCorrection,
+	saveAttendanceRecords: handleSaveAttendanceRecords,
         createConsultation: handleCreateConsultation,
         replyConsultation: handleReplyConsultation,
         markNotificationAsRead: handleMarkNotificationAsRead,
@@ -265,6 +379,9 @@ export const AcademicProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addNewClass: handleAddNewClass,
         saveClassGrades: handleSaveClassGrades,
         getGradesByClassId: handleGetGradesByClassId,
+        addStudentGrade: handleAddStudentGrade,
+        verifyGradeRecord: handleVerifyGradeRecord,
+        deleteStudentGrade: handleDeleteStudentGrade,
         resetGradesToDefault: handleResetGradesToDefault,
         refreshData,
       }}

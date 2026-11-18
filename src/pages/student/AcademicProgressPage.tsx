@@ -7,6 +7,8 @@ import {
   calculateAcademicProgress,
   calculateCumulativeGPA,
   PASSING_GRADES,
+  isOfficialGrade,
+  getLatestOfficialAttempts,
 } from '../../utils/gpaCalculator';
 import {
   Award,
@@ -33,8 +35,9 @@ export const AcademicProgressPage: React.FC = () => {
       (plan.status === 'submitted' || plan.status === 'approved')
   );
 
-  // Identifikasi mata kuliah yang sudah lulus.
-  const passedGrades = grades.filter(
+  // Identifikasi mata kuliah yang sudah lulus berdasarkan percobaan resmi terbaru (latest attempt).
+  const latestAttempts = getLatestOfficialAttempts(grades);
+  const passedGrades = latestAttempts.filter(
     (grade) =>
       grade.isPassed &&
       PASSING_GRADES.includes(grade.letterGrade)

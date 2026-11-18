@@ -18,8 +18,8 @@ export const MOCK_USERS: User[] = [
   {
     id: 'usr_student_01',
     username: 'mahasiswa',
-    name: 'David Wowor',
-    email: '12410168@student.unklab.ac.id',
+    name: 'Syalom Mauren Angginaloy',
+    email: '12410619@student.unklab.ac.id',
     role: 'student',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80',
     phone: '081244556677',
@@ -42,8 +42,8 @@ export const MOCK_STUDENTS: StudentProfile[] = [
   {
     id: 'std_01',
     userId: 'usr_student_01',
-    nim: '105022110001',
-    name: 'David Wowor',
+    nim: '12410619',
+    name: 'Syalom Mauren Angginaloy',
     programStudy: 'Informatika',
     faculty: 'Fakultas Ilmu Komputer',
     academicAdvisorId: 'lec_01',
@@ -63,7 +63,7 @@ export const MOCK_STUDENTS: StudentProfile[] = [
   {
     id: 'std_02',
     userId: 'usr_student_02',
-    nim: '105022110002',
+    nim: '12410002',
     name: 'Sarah Lumempouw',
     programStudy: 'Informatika',
     faculty: 'Fakultas Ilmu Komputer',
@@ -84,7 +84,7 @@ export const MOCK_STUDENTS: StudentProfile[] = [
   {
     id: 'std_03',
     userId: 'usr_student_03',
-    nim: '105022110003',
+    nim: '12410003',
     name: 'Kevin Runtu',
     programStudy: 'Informatika',
     faculty: 'Fakultas Ilmu Komputer',
@@ -105,7 +105,7 @@ export const MOCK_STUDENTS: StudentProfile[] = [
   {
     id: 'std_04',
     userId: 'usr_student_04',
-    nim: '105022110004',
+    nim: '12410004',
     name: 'Jessica Karinda',
     programStudy: 'Informatika',
     faculty: 'Fakultas Ilmu Komputer',
@@ -126,7 +126,7 @@ export const MOCK_STUDENTS: StudentProfile[] = [
   {
     id: 'std_05',
     userId: 'usr_student_05',
-    nim: '105022110005',
+    nim: '12410005',
     name: 'Bryan Pinontoan',
     programStudy: 'Informatika',
     faculty: 'Fakultas Ilmu Komputer',
@@ -576,7 +576,7 @@ export const MOCK_CLASSES: CourseClass[] = [
   },
 ];
 
-// David Wowor's Passed Grades
+// Syalom Mauren Angginaloy's Passed Grades
 // Nilai merupakan data simulasi yang dipetakan ke katalog Kurikulum Informatika 2024.
 export const MOCK_GRADES_DAVID: GradeRecord[] = [
   {
@@ -721,8 +721,8 @@ export const MOCK_STUDY_PLANS: StudyPlan[] = [
   {
     id: 'krs_std01_sem5',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     academicYear: '2026/2027 Ganjil',
     semester: 5,
     status: 'submitted',
@@ -784,7 +784,7 @@ export const MOCK_STUDY_PLANS: StudyPlan[] = [
   {
     id: 'krs_std02_sem5',
     studentId: 'std_02',
-    studentNim: '105022110002',
+    studentNim: '12410002',
     studentName: 'Sarah Lumempouw',
     academicYear: '2026/2027 Ganjil',
     semester: 5,
@@ -848,7 +848,7 @@ export const MOCK_STUDY_PLANS: StudyPlan[] = [
   {
     id: 'krs_std03_sem5',
     studentId: 'std_03',
-    studentNim: '105022110003',
+    studentNim: '12410003',
     studentName: 'Kevin Runtu',
     academicYear: '2026/2027 Ganjil',
     semester: 5,
@@ -867,8 +867,8 @@ export const MOCK_ATTENDANCES: AttendanceRecord[] = [
   {
     id: 'att_01',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     classId: 'cls_if401_a',
     courseName: 'Jaringan Komputer II',
     meetingNumber: 1,
@@ -878,8 +878,8 @@ export const MOCK_ATTENDANCES: AttendanceRecord[] = [
   {
     id: 'att_02',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     classId: 'cls_if401_a',
     courseName: 'Jaringan Komputer II',
     meetingNumber: 2,
@@ -889,8 +889,8 @@ export const MOCK_ATTENDANCES: AttendanceRecord[] = [
   {
     id: 'att_03',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     classId: 'cls_if401_a',
     courseName: 'Jaringan Komputer II',
     meetingNumber: 3,
@@ -903,8 +903,8 @@ export const MOCK_ATTENDANCES: AttendanceRecord[] = [
   {
     id: 'att_04',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     classId: 'cls_if403_a',
     courseName: 'Konsep Sistem Operasi',
     meetingNumber: 1,
@@ -914,8 +914,8 @@ export const MOCK_ATTENDANCES: AttendanceRecord[] = [
   {
     id: 'att_05',
     studentId: 'std_01',
-    studentNim: '105022110001',
-    studentName: 'David Wowor',
+    studentNim: '12410619',
+    studentName: 'Syalom Mauren Angginaloy',
     classId: 'cls_if403_a',
     courseName: 'Konsep Sistem Operasi',
     meetingNumber: 2,
@@ -929,8 +929,8 @@ export const MOCK_CONSULTATIONS: ConsultationSession[] = [
   {
     id: 'cns_01',
     studentId: 'std_01',
-    studentName: 'David Wowor',
-    studentNim: '105022110001',
+    studentName: 'Syalom Mauren Angginaloy',
+    studentNim: '12410619',
     lecturerId: 'lec_01',
     lecturerName: 'Semmy W. Taju, S.Kom., M.S., Ph.D.',
     topic: 'Konsultasi Topik Capstone Project Machine Learning',
@@ -944,8 +944,8 @@ export const MOCK_CONSULTATIONS: ConsultationSession[] = [
   {
     id: 'cns_02',
     studentId: 'std_01',
-    studentName: 'David Wowor',
-    studentNim: '105022110001',
+    studentName: 'Syalom Mauren Angginaloy',
+    studentNim: '12410619',
     lecturerId: 'lec_01',
     lecturerName: 'Semmy W. Taju, S.Kom., M.S., Ph.D.',
     topic: 'Pertanyaan Batas Maksimal SKS dan Magang MBKM',
@@ -983,7 +983,7 @@ export const MOCK_NOTIFICATIONS: SystemNotification[] = [
     id: 'notif_03',
     userId: 'usr_lecturer_01',
     title: 'Pengajuan KRS Baru Masuk',
-    message: 'David Wowor (105022110001) telah mengajukan KRS Semester 5 (9 SKS) menunggu persetujuan Anda.',
+    message: 'Syalom Mauren Angginaloy (12410619) telah mengajukan KRS Semester 5 (9 SKS) menunggu persetujuan Anda.',
     type: 'warning',
     link: '/lecturer/krs-approval',
     read: false,
@@ -993,7 +993,7 @@ export const MOCK_NOTIFICATIONS: SystemNotification[] = [
     id: 'notif_04',
     userId: 'usr_lecturer_01',
     title: 'Permohonan Koreksi Absensi',
-    message: 'David Wowor mengajukan koreksi absensi Pertemuan 3 Mata Kuliah Jaringan Komputer II.',
+    message: 'Syalom Mauren Angginaloy mengajukan koreksi absensi Pertemuan 3 Mata Kuliah Jaringan Komputer II.',
     type: 'info',
     link: '/lecturer/attendance',
     read: false,
@@ -1006,7 +1006,7 @@ export const MOCK_AUDIT_LOGS: AuditLog[] = [
   {
     id: 'log_01',
     timestamp: '2026-11-09 14:32:00',
-    userName: 'David Wowor',
+    userName: 'Syalom Mauren Angginaloy',
     userRole: 'student',
     action: 'SUBMIT_KRS',
     details: 'Mengirimkan KRS Semester 5 (9 SKS) ke Dosen PA.',
@@ -1018,7 +1018,7 @@ export const MOCK_AUDIT_LOGS: AuditLog[] = [
     userName: 'Semmy W. Taju, S.Kom., M.S., Ph.D.',
     userRole: 'lecturer',
     action: 'APPROVE_KRS',
-    details: 'Menyetujui KRS Mahasiswa Sarah Lumempouw (NIM 105022110002).',
+    details: 'Menyetujui KRS Mahasiswa Sarah Lumempouw (NIM 12410002).',
     ipAddress: '192.168.1.12 (Ruang Dosen Fasilkom)',
   },
   {

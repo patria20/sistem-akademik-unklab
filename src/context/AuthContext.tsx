@@ -1,3 +1,4 @@
+﻿
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { User, UserRole } from '../types/academic';
 import { MOCK_USERS } from '../data/mockAcademicData';
@@ -28,12 +29,15 @@ const LECTURER_EMAIL_REGEX = /^[a-z0-9._-]+@unklab\.ac\.id$/i;
 
 export const detectRoleFromUnklabEmail = (email: string): UserRole | null => {
   const trimmed = email.trim().toLowerCase();
+
   if (STUDENT_EMAIL_REGEX.test(trimmed)) return 'student';
+
   if (LECTURER_EMAIL_REGEX.test(trimmed)) {
     const localPart = trimmed.split('@')[0];
     if (localPart === 'admin') return null;
     return 'lecturer';
   }
+
   return null;
 };
 
@@ -42,12 +46,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const saved = localStorage.getItem(AUTH_STORAGE_KEY);
       if (!saved) return null;
+
       const parsed = JSON.parse(saved) as User;
+
       if (parsed?.role !== 'student' && parsed?.role !== 'lecturer') {
         localStorage.removeItem(AUTH_STORAGE_KEY);
         localStorage.removeItem(SESSION_TIMESTAMP_KEY);
         return null;
       }
+
       return parsed;
     } catch {
       return null;
@@ -66,7 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (user) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+
       const now = Date.now();
+
       if (!sessionStartedAt) {
         setSessionStartedAt(now);
         localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
@@ -80,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback((email: string, password: string): LoginResult => {
     const trimmedEmail = email.trim().toLowerCase();
+
     if (!trimmedEmail || !password.trim()) {
       return {
         success: false,
@@ -87,15 +97,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    if (trimmedEmail === 'admin@unklab.ac.id' || trimmedEmail.startsWith('admin@')) {
+    const demoCredentials = [
+      {
+        email: '12410619@student.unklab.ac.id',
+        password: 'unklab2026',
+      },
+      {
+        email: 'dosen@unklab.ac.id',
+        password: 'unklab2026',
+      },
+    ];
+
+    const matchedDemo = demoCredentials.find(
+      (account) => account.email === trimmedEmail
+    );
+
+    if (!matchedDemo) {
       return {
         success: false,
-        error:
-          'Fitur dan akun Admin telah dihapus. Silakan login menggunakan email Mahasiswa (@student.unklab.ac.id) atau Dosen (@unklab.ac.id).',
+        error: 'Akun tidak terdaftar. Gunakan salah satu dari dua akun demo SIAM-UNKLAB.',
+      };
+    }
+
+    if (password !== matchedDemo.password) {
+      return {
+        success: false,
+        error: 'Kata sandi yang Anda masukkan salah.',
       };
     }
 
     const detectedRole = detectRoleFromUnklabEmail(trimmedEmail);
+
     if (!detectedRole) {
       return {
         success: false,
@@ -104,26 +136,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    const localPart = trimmedEmail.split('@')[0];
-    const exactMatch = MOCK_USERS.find((u) => u.email.toLowerCase() === trimmedEmail);
-    let loggedInUser: User;
+    const exactMatch = MOCK_USERS.find(
+      (u) => u.email.toLowerCase() === trimmedEmail
+    );
 
-    if (exactMatch) {
-      loggedInUser = exactMatch;
-    } else {
-      const baseUser = MOCK_USERS.find((u) => u.role === detectedRole)!;
-      loggedInUser = {
-        ...baseUser,
-        email: trimmedEmail,
-        username: localPart,
-        identityNumber:
-          detectedRole === 'student' && /^\d+$/.test(localPart)
-            ? localPart
-            : baseUser.identityNumber,
+    if (!exactMatch) {
+      return {
+        success: false,
+        error: 'Data akun demo tidak ditemukan.',
       };
     }
 
+    const loggedInUser = exactMatch;
+
     setUser(loggedInUser);
+
     const now = Date.now();
     setSessionStartedAt(now);
     localStorage.setItem(SESSION_TIMESTAMP_KEY, now.toString());
@@ -141,9 +168,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const demoAccounts = [
     {
       role: 'student' as UserRole,
-      label: 'Mahasiswa (David Wowor)',
-      email: '12410168@student.unklab.ac.id',
-      name: 'David Wowor (12410168)',
+      label: 'Mahasiswa (Syalom Mauren Angginaloy)',
+      email: '12410619@student.unklab.ac.id',
+      name: 'Syalom Mauren Angginaloy (12410168)',
     },
     {
       role: 'lecturer' as UserRole,
@@ -172,8 +199,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
+
   if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
+
   return context;
 };

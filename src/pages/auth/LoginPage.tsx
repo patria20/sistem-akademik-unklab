@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useAuth, detectRoleFromUnklabEmail } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { useNavigate, Link } from 'react-router';
@@ -20,7 +20,7 @@ export const LoginPage: React.FC = () => {
   const { success, danger } = useToast();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('12410168@student.unklab.ac.id');
+  const [email, setEmail] = useState('12410619@student.unklab.ac.id');
   const [password, setPassword] = useState('unklab2026');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -105,7 +105,7 @@ export const LoginPage: React.FC = () => {
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => handleQuickDemo('student', '12410168@student.unklab.ac.id')}
+                onClick={() => handleQuickDemo('student', '12410619@student.unklab.ac.id')}
                 className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
                   detectedRole === 'student'
                     ? 'border-blue-600 bg-blue-50 text-blue-800 font-bold shadow-xs'
@@ -171,12 +171,12 @@ export const LoginPage: React.FC = () => {
                     setEmail(e.target.value);
                     if (errorMsg) setErrorMsg(null);
                   }}
-                  placeholder="12410168@student.unklab.ac.id atau dosen@unklab.ac.id"
+                  placeholder="12410619@student.unklab.ac.id atau dosen@unklab.ac.id"
                   className="w-full pl-9 pr-4 py-2.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-600/20 font-medium"
                 />
               </div>
               <p className="text-[10px] text-slate-400 mt-1">
-                Mahasiswa: <code>nim@student.unklab.ac.id</code> • Dosen: <code>nama@unklab.ac.id</code>
+                Mahasiswa: <code>nim@student.unklab.ac.id</code> â€¢ Dosen: <code>nama@unklab.ac.id</code>
               </p>
             </div>
 

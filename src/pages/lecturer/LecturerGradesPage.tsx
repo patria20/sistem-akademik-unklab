@@ -14,14 +14,20 @@ import {
   RotateCcw,
   Users,
   GraduationCap,
+  Clock,
+  XCircle,
+  FileCheck,
 } from 'lucide-react';
 
 export const LecturerGradesPage: React.FC = () => {
-  const { classes, students, activeLecturer, saveClassGrades, allGrades } = useAcademic();
+  const { classes, students, activeLecturer, saveClassGrades, allGrades, verifyGradeRecord } = useAcademic();
+  const [activeTab, setActiveTab] = useState<'classes' | 'verification'>('classes');
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [successToast, setSuccessToast] = useState<{ message: string; count: number } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [verifFilter, setVerifFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [verifActionMessage, setVerifActionMessage] = useState<string | null>(null);
 
   // Filter classes taught by active lecturer, fallback to all classes if none
   const lecturerClasses = useMemo(() => {
@@ -184,28 +190,288 @@ export const LecturerGradesPage: React.FC = () => {
     return { avg, highest, lowest, passRate, gradesCount };
   }, [students, gradesInput]);
 
+  // Data nilai mandiri mahasiswa
+  const studentSelfGrades = useMemo(() => {
+    return allGrades.filter((g) => g.inputSource === 'student');
+  }, [allGrades]);
+
+  const pendingGradesCount = useMemo(() => {
+    return studentSelfGrades.filter((g) => g.verificationStatus === 'pending').length;
+  }, [studentSelfGrades]);
+
+  const filteredSelfGrades = useMemo(() => {
+    return studentSelfGrades.filter((g) => {
+      if (verifFilter === 'all') return true;
+      return g.verificationStatus === verifFilter;
+    });
+  }, [studentSelfGrades, verifFilter]);
+
+  const handleVerify = (gradeId: string, status: 'approved' | 'rejected') => {
+    const res = verifyGradeRecord(gradeId, status);
+    if (res) {
+      const student = students.find((s) => s.id === res.studentId);
+      const studentName = student ? student.name : res.studentId;
+      setVerifActionMessage(
+        status === 'approved'
+          ? `Nilai ${res.courseCode} untuk mahasiswa ${studentName} berhasil DISETUJUI dan langsung masuk ke perhitungan akademik resmi.`
+          : `Nilai ${res.courseCode} untuk mahasiswa ${studentName} telah DITOLAK.`
+      );
+      setTimeout(() => setVerifActionMessage(null), 5000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Input & Pengelolaan Nilai Perkuliahan"
-        subtitle="Entri nilai tugas, UTS, UAS, dan pembobotan mutu huruf resmi terhubung langsung ke transkrip mahasiswa"
+        title="Input & Verifikasi Nilai Akademik"
+        subtitle="Entri nilai kelas resmi dan verifikasi pengajuan nilai mandiri mahasiswa UNKLAB"
         breadcrumbs={[
           { label: 'Portal Dosen', path: '/lecturer/dashboard' },
-          { label: 'Input Nilai Dosen' },
+          { label: 'Pengelolaan Nilai' },
         ]}
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSaveGrades}
-              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all"
-            >
-              <Save className="w-4 h-4" />
-              Simpan & Publikasikan ke Transkrip
-            </button>
-          </div>
+          activeTab === 'classes' ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSaveGrades}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold shadow-sm transition-all"
+              >
+                <Save className="w-4 h-4" />
+                Simpan & Publikasikan ke Transkrip
+              </button>
+            </div>
+          ) : null
         }
       />
 
+      {/* Tab Navigation */}
+      <div className="flex flex-wrap gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('classes')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+            activeTab === 'classes'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:bg-white/70'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Input Nilai Kelas Perkuliahan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('verification')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${
+            activeTab === 'verification'
+              ? 'bg-white text-blue-700 shadow-xs'
+              : 'text-slate-600 hover:bg-white/70'
+          }`}
+        >
+          <FileCheck className="w-4 h-4" />
+          <span>Verifikasi Nilai Mandiri Mahasiswa</span>
+          {pendingGradesCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
+              {pendingGradesCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === 'verification' ? (
+        /* TAB VERIFIKASI NILAI MANDIRI */
+        <div className="space-y-6">
+          {verifActionMessage && (
+            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs shadow-xs flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span className="font-semibold">{verifActionMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifActionMessage(null)}
+                className="text-emerald-600 hover:text-emerald-800 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* Filter Status Verifikasi */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700">Filter Status:</span>
+              {(['all', 'pending', 'approved', 'rejected'] as const).map((st) => (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => setVerifFilter(st)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    verifFilter === st
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {st === 'all'
+                    ? 'Semua'
+                    : st === 'pending'
+                      ? `Menunggu (${pendingGradesCount})`
+                      : st === 'approved'
+                        ? 'Disetujui'
+                        : 'Ditolak'}
+                </button>
+              ))}
+            </div>
+
+            <div className="text-xs text-slate-500">
+              Total Pengajuan: <strong>{filteredSelfGrades.length}</strong>
+            </div>
+          </div>
+
+          {/* Table Verifikasi */}
+          {filteredSelfGrades.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <FileCheck className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <h3 className="font-bold text-slate-800 text-sm">
+                Tidak Ada Pengajuan Nilai Mandiri
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                {verifFilter === 'pending'
+                  ? 'Semua pengajuan nilai mandiri mahasiswa telah diverifikasi.'
+                  : 'Belum ada data pengajuan nilai mandiri pada kategori ini.'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 font-bold uppercase text-[11px]">
+                      <th className="py-3 px-4">Mahasiswa</th>
+                      <th className="py-3 px-4">Mata Kuliah</th>
+                      <th className="py-3 px-4 text-center">Periode</th>
+                      <th className="py-3 px-4 text-center">SKS</th>
+                      <th className="py-3 px-4 text-center">Nilai</th>
+                      <th className="py-3 px-4 text-center">Bobot</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-center">Aksi Verifikasi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredSelfGrades.map((g) => {
+                      const student = students.find((s) => s.id === g.studentId);
+                      return (
+                        <tr key={g.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-slate-900">
+                              {student?.name || 'Mahasiswa'}
+                            </div>
+                            <div className="text-[11px] font-mono text-slate-500">
+                              NIM: {student?.nim || g.studentId}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="font-mono font-bold text-blue-700">
+                              {g.courseCode}
+                            </div>
+                            <div className="font-medium text-slate-800">
+                              {g.courseName}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-center">
+                            <div className="font-semibold text-slate-800">
+                              Sem {g.semester}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {g.academicYear}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-center font-bold text-slate-800">
+                            {g.credits}
+                          </td>
+
+                          <td className="py-3 px-4 text-center">
+                            <span className="inline-block px-2 py-0.5 rounded-md font-bold text-xs bg-blue-50 text-blue-700 border border-blue-200">
+                              {g.letterGrade}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-center font-mono font-bold text-slate-700">
+                            {g.gradePoint.toFixed(2)}
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {g.verificationStatus === 'pending' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <Clock className="w-3 h-3 text-amber-600" />
+                                Menunggu Verifikasi
+                              </span>
+                            ) : g.verificationStatus === 'approved' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Disetujui
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <XCircle className="w-3 h-3 text-rose-600" />
+                                Ditolak
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 text-center">
+                            {g.verificationStatus === 'pending' ? (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerify(g.id, 'approved')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Setujui</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleVerify(g.id, 'rejected')}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs transition-colors"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  <span>Tolak</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-center gap-1 text-[11px] text-slate-500">
+                                <span>Sudah diproses</span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleVerify(
+                                      g.id,
+                                      g.verificationStatus === 'approved' ? 'rejected' : 'approved'
+                                    )
+                                  }
+                                  className="text-blue-600 hover:underline ml-1 font-semibold"
+                                >
+                                  (Ubah)
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* TAB INPUT NILAI KELAS (DEFAULT KONTEN LAMA) */
+        <>
       {/* Success Banner */}
       {successToast && (
         <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs shadow-xs flex items-start gap-3 animate-in fade-in">
@@ -564,6 +830,8 @@ export const LecturerGradesPage: React.FC = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
