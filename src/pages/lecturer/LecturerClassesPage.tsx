@@ -21,19 +21,22 @@ export const LecturerClassesPage: React.FC = () => {
     lecturerClasses[0];
 
   // Mengambil mahasiswa dengan KRS yang terdaftar pada kelas ini
-  const getApprovedRoster = (classId: string) => {
-    const registeredStudentIds = new Set<string>();
+const getApprovedRoster = (classId: string) => {
+  const registeredStudentIds = new Set<string>();
 
-    studyPlans.forEach((plan) => {
-      if (plan.items.some((item) => item.classId === classId)) {
-        registeredStudentIds.add(plan.studentId);
-      }
-    });
+  studyPlans.forEach((plan) => {
+    if (
+      plan.status === 'approved' &&
+      plan.items.some((item) => item.classId === classId)
+    ) {
+      registeredStudentIds.add(plan.studentId);
+    }
+  });
 
-    return students.filter((student) =>
-      registeredStudentIds.has(student.id)
-    );
-  };
+  return students.filter((student) =>
+    registeredStudentIds.has(student.id)
+  );
+};
 
   return (
     <div className="space-y-6">

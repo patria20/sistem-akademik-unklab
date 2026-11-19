@@ -57,9 +57,13 @@ export const LecturerGradesPage: React.FC = () => {
   const classStudents = useMemo(() => {
     if (!currentClass) return [];
     const enrolledStudentIds = new Set(
-      studyPlans
-        .filter((sp) => sp.items.some((item) => item.classId === currentClass.id))
-        .map((sp) => sp.studentId)
+studyPlans
+  .filter(
+    (sp) =>
+      sp.status === 'approved' &&
+      sp.items.some((item) => item.classId === currentClass.id)
+  )
+  .map((sp) => sp.studentId)
     );
     return students.filter((std) => enrolledStudentIds.has(std.id));
   }, [currentClass, students, studyPlans]);
