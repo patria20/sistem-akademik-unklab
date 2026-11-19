@@ -102,11 +102,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       icon: LayoutDashboard,
     },
     {
-      name: 'Kelas Saya',
-      path: '/lecturer/classes',
-      icon: BookOpen,
-    },
-    {
       name: 'Persetujuan KRS',
       path: '/lecturer/krs-approval',
       icon: FileCheck,
@@ -119,14 +114,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       icon: CheckSquare,
     },
     {
-      name: 'Input Nilai Kuliah',
-      path: '/lecturer/grades',
-      icon: Award,
+      name: 'Kelas Saya & Input Nilai',
+      path: '/lecturer/classes',
+      icon: BookOpen,
     },
     {
       name: 'Konsultasi Bimbingan',
       path: '/lecturer/consultation',
       icon: MessageSquare,
+    },
+    {
+      name: 'Laporan Masalah Akademik',
+      path: '/lecturer/reports',
+      icon: ClipboardList,
     },
   ];
 

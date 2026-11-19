@@ -24,11 +24,11 @@ import { AIAssistantPage } from '../pages/student/AIAssistantPage';
 // Lecturer Pages
 import { LecturerDashboard } from '../pages/lecturer/LecturerDashboard';
 import { KRSApprovalPage } from '../pages/lecturer/KRSApprovalPage';
-import { LecturerClassesPage } from '../pages/lecturer/LecturerClassesPage';
 import { LecturerAttendancePage } from '../pages/lecturer/LecturerAttendancePage';
 import { LecturerGradesPage } from '../pages/lecturer/LecturerGradesPage';
 import { LecturerConsultationPage } from '../pages/lecturer/LecturerConsultationPage';
 import { LecturerClassAnalysisPage } from '../pages/lecturer/LecturerClassAnalysisPage';
+import { LecturerReportsPage } from '../pages/lecturer/LecturerReportsPage';
 
 export const AppRoutes: React.FC = () => {
   const { user, isAuthenticated } = useAuth();
@@ -143,7 +143,7 @@ export const AppRoutes: React.FC = () => {
           path="/lecturer/classes"
           element={
             <RoleRouteGuard allowedRole="lecturer">
-              <LecturerClassesPage />
+              <LecturerGradesPage />
             </RoleRouteGuard>
           }
         />
@@ -151,7 +151,7 @@ export const AppRoutes: React.FC = () => {
           path="/lecturer/students"
           element={
             <RoleRouteGuard allowedRole="lecturer">
-              <LecturerClassesPage />
+              <LecturerGradesPage />
             </RoleRouteGuard>
           }
         />
@@ -184,6 +184,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <RoleRouteGuard allowedRole="lecturer">
               <LecturerConsultationPage />
+            </RoleRouteGuard>
+          }
+        />
+        <Route
+          path="/lecturer/reports"
+          element={
+            <RoleRouteGuard allowedRole="lecturer">
+              <LecturerReportsPage />
             </RoleRouteGuard>
           }
         />

@@ -95,8 +95,13 @@ const inputClass =
   'w-full text-xs border border-slate-300 rounded-xl px-3 py-2.5 outline-none bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 
 export const ReportProblemPage: React.FC = () => {
-  const { activeStudent, courses } = useAcademic();
+  const { activeStudent, activeKrs } = useAcademic();
   const studentId = activeStudent?.id;
+
+  const contractedCourses = useMemo(
+    () => activeKrs?.items || [],
+    [activeKrs?.items]
+  );
 
   const [version, setVersion] = useState(0); // dinaikkan setiap kali laporan baru disimpan
   const [expandedId, setExpandedId] = useState<IssueCategory | null>(null);
@@ -254,41 +259,32 @@ export const ReportProblemPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Kategori Masalah <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as IssueCategory | '')}
-              className={inputClass}
-            >
-              <option value="">-- Pilih Kategori --</option>
-              {CATEGORIES.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
+<div>
+  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+    Mata Kuliah Terkait{' '}
+    <span className="font-normal text-slate-400">(opsional)</span>
+  </label>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Mata Kuliah Terkait <span className="font-normal text-slate-400">(opsional)</span>
-            </label>
-            <select
-              value={courseCode}
-              onChange={(e) => setCourseCode(e.target.value)}
-              className={inputClass}
-            >
-              <option value="">-- Tidak Ada / Tidak Diketahui --</option>
-              {courses.map((c) => (
-                <option key={c.id} value={c.code}>
-                  [{c.code}] {c.name} ({c.credits} SKS)
-                </option>
-              ))}
-            </select>
-          </div>
+  <select
+    value={courseCode}
+    onChange={(e) => setCourseCode(e.target.value)}
+    className={inputClass}
+  >
+    <option value="">-- Tidak Ada / Tidak Diketahui --</option>
+
+    {contractedCourses.map((item) => (
+      <option key={item.id} value={item.courseCode}>
+        [{item.courseCode}] {item.courseName} ({item.credits} SKS)
+      </option>
+    ))}
+  </select>
+
+  {contractedCourses.length === 0 && (
+    <p className="text-[11px] text-amber-600 mt-1">
+      Belum ada mata kuliah yang dikontrak dalam KRS aktif.
+    </p>
+  )}
+</div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">

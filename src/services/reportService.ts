@@ -1,3 +1,4 @@
+
 // Penyimpanan laporan masalah akademik mahasiswa (localStorage, tanpa backend).
 // Dibuat terpisah dari academicService.ts supaya tidak bentrok dengan pekerjaan anggota lain.
 
@@ -11,7 +12,7 @@ export interface IssueReport {
   courseCode: string | null;
   description: string;
   status: IssueStatus;
-  createdAt: string; // format ISO
+  createdAt: string;
 }
 
 export type NewIssueReport = Pick<
@@ -37,6 +38,22 @@ export const ReportService = {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
+  // Mengambil seluruh laporan untuk ditampilkan kepada dosen PA.
+  getAll(): IssueReport[] {
+    return readAll().sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt)
+    );
+  },
+
+  // Memperbarui status laporan.
+  updateStatus(id: string, status: IssueStatus): void {
+    const reports = readAll().map((report) =>
+      report.id === id ? { ...report, status } : report
+    );
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+  },
+
   create(data: NewIssueReport): IssueReport {
     const report: IssueReport = {
       ...data,
@@ -44,7 +61,12 @@ export const ReportService = {
       status: 'submitted',
       createdAt: new Date().toISOString(),
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([report, ...readAll()]));
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify([report, ...readAll()])
+    );
+
     return report;
   },
 };
