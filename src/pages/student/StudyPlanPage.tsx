@@ -100,9 +100,11 @@ export const StudyPlanPage: React.FC = () => {
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
   // Selected classes objects
-  const selectedClasses = useMemo(() => {
-    return classes.filter((c) => selectedClassIds.includes(c.id));
-  }, [classes, selectedClassIds]);
+const selectedClasses = useMemo(() => {
+  return classes.filter((cls) =>
+    selectedClassIds.includes(cls.id)
+  );
+}, [classes, selectedClassIds]);
 
   // Master Academic Validation
   const validationResult = useMemo(() => {
@@ -246,80 +248,112 @@ export const StudyPlanPage: React.FC = () => {
     }
   };
 
-  const isLocked = activeStudent?.krsStatus === 'approved';
+   // KRS yang telah disetujui tidak dapat diedit melalui KRS Builder.
+  const isLocked = activeKrs?.status === 'approved';
+
+  // Riwayat Add & Drop hanya menampilkan permintaan
+  // yang terkait dengan KRS aktif mahasiswa.
   const studentAddDropRequests = useMemo(
-  () =>
-    addDropRequests.filter(
-      (request) => request.studentId === activeStudent?.id
-    ),
-  [addDropRequests, activeStudent?.id]
-);
-
-const pendingAddCourseIds = useMemo(
-  () =>
-    studentAddDropRequests
-      .filter(
+    () =>
+      addDropRequests.filter(
         (request) =>
-          request.type === 'add' && request.status === 'submitted'
-      )
-      .map((request) => request.courseItem.courseId),
-  [studentAddDropRequests]
-);
+          request.studentId === activeStudent?.id &&
+          request.studyPlanId === activeKrs?.id
+      ),
+    [addDropRequests, activeStudent?.id, activeKrs?.id]
+  );
 
-const pendingDropItemIds = useMemo(
-  () =>
-    studentAddDropRequests
-      .filter(
-        (request) =>
-          request.type === 'drop' && request.status === 'submitted'
-      )
-      .map((request) => request.courseItem.id),
-  [studentAddDropRequests]
-);
+  // Mata kuliah yang sudah dikontrak dalam KRS aktif.
+  const contractedCourseIds = useMemo(
+    () =>
+      new Set(
+        activeKrs?.items.map((item) => item.courseId) || []
+      ),
+    [activeKrs?.items]
+  );
 
-const latestStudentGrades = useMemo(
-  () =>
-    getLatestOfficialAttempts(
-      grades.filter(
-        (grade) => grade.studentId === activeStudent?.id
-      )
-    ),
-  [grades, activeStudent?.id]
-);
+  // Kelas yang dapat diajukan untuk Add.
+  // Mata kuliah yang sudah ada di KRS tidak ditampilkan lagi.
+  const availableAddClasses = useMemo(
+    () =>
+      classes.filter(
+        (cls) => !contractedCourseIds.has(cls.courseId)
+      ),
+    [classes, contractedCourseIds]
+  );
 
-const passedCourseIdSet = useMemo(
-  () =>
-    new Set(
-      latestStudentGrades
+  // Tampilkan mata kuliah yang mempunyai kelas tersedia.
+  const availableAddCourses = useMemo(() => {
+    const availableCourseIds = new Set(
+      availableAddClasses.map((cls) => cls.courseId)
+    );
+
+    return courses.filter((course) =>
+      availableCourseIds.has(course.id)
+    );
+  }, [courses, availableAddClasses]);
+
+  // Mata kuliah yang sedang menunggu persetujuan Add.
+  const pendingAddCourseIds = useMemo(
+    () =>
+      studentAddDropRequests
         .filter(
-          (grade) =>
-            grade.isPassed &&
-            PASSING_GRADES.includes(grade.letterGrade)
+          (request) =>
+            request.type === 'add' &&
+            request.status === 'submitted'
         )
-        .map((grade) => grade.courseId)
-    ),
-  [latestStudentGrades]
-);
-
-const availableAddClasses = useMemo(() => {
-  const contractedCourseIds = new Set(
-    activeKrs?.items.map((item) => item.courseId) || []
+        .map((request) => request.courseItem.courseId),
+    [studentAddDropRequests]
   );
 
-  return classes.filter(
-    (cls) =>
-      !contractedCourseIds.has(cls.courseId) &&
-      !pendingAddCourseIds.includes(cls.courseId)
+  // Mata kuliah yang sedang menunggu persetujuan Drop.
+  const pendingDropItemIds = useMemo(
+    () =>
+      studentAddDropRequests
+        .filter(
+          (request) =>
+            request.type === 'drop' &&
+            request.status === 'submitted'
+        )
+        .map((request) => request.courseItem.id),
+    [studentAddDropRequests]
   );
-}, [classes, activeKrs?.items, pendingAddCourseIds]);
 
-const availableDropItems = useMemo(
-  () =>
-    (activeKrs?.items || []).filter(
-      (item) => !pendingDropItemIds.includes(item.id)
-    ),
-  [activeKrs?.items, pendingDropItemIds]
-);
+  // Ambil nilai resmi terbaru milik mahasiswa aktif.
+  const latestStudentGrades = useMemo(
+    () =>
+      getLatestOfficialAttempts(
+        grades.filter(
+          (grade) => grade.studentId === activeStudent?.id
+        )
+      ),
+    [grades, activeStudent?.id]
+  );
+
+  // Daftar mata kuliah yang sudah lulus berdasarkan nilai terbaru.
+  const passedCourseIdSet = useMemo(
+    () =>
+      new Set(
+        latestStudentGrades
+          .filter(
+            (grade) =>
+              grade.isPassed &&
+              PASSING_GRADES.includes(grade.letterGrade)
+          )
+          .map((grade) => grade.courseId)
+      ),
+    [latestStudentGrades]
+  );
+
+  // Mata kuliah yang dapat diajukan untuk Drop
+  // harus berasal dari item KRS aktif.
+  const availableDropItems = useMemo(
+    () =>
+      (activeKrs?.items || []).filter(
+        (item) => !pendingDropItemIds.includes(item.id)
+      ),
+    [activeKrs?.items, pendingDropItemIds]
+  );
 
 const handleSubmitAddDrop = () => {
   const targetId =
@@ -482,8 +516,8 @@ const handleSubmitAddDrop = () => {
 
   {addDropType === 'add' ? (
     <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-      {courses.map((course) => {
-        const courseClasses = classes.filter(
+      {availableAddCourses.map((course) => {
+        const courseClasses = availableAddClasses.filter(
           (cls) => cls.courseId === course.id
         );
 

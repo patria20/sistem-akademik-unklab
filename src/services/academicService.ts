@@ -199,6 +199,27 @@ export class AcademicService {
     if (!localStorage.getItem(STORAGE_KEYS.STUDENTS)) {
       setStoredItem(STORAGE_KEYS.STUDENTS, MOCK_STUDENTS);
     }
+
+    // Sinkronisasi identitas mahasiswa demo
+const students = this.getStudents();
+
+const updatedStudents = students.map((student) => {
+  if (
+    student.id === 'std_01' ||
+    student.nim === '12410619' ||
+    student.userId === 'usr_student_01'
+  ) {
+    return {
+      ...student,
+      name: 'Syalom Mauren Angginaloy',
+      nim: '12410619',
+    };
+  }
+
+  return student;
+});
+
+setStoredItem(STORAGE_KEYS.STUDENTS, updatedStudents);
         // Migrasi NIM mahasiswa lama ke format NIM baru
     const nimReplacements: Record<string, string> = {
       '105022110001': '12410619',
@@ -248,6 +269,26 @@ export class AcademicService {
     if (!localStorage.getItem(STORAGE_KEYS.STUDY_PLANS)) {
       setStoredItem(STORAGE_KEYS.STUDY_PLANS, MOCK_STUDY_PLANS);
     }
+
+    // Sinkronisasi identitas mahasiswa pada pengajuan KRS
+const studyPlans = this.getStudyPlans();
+
+const updatedStudyPlans = studyPlans.map((plan) => {
+  if (
+    plan.studentId === 'std_01' ||
+    plan.studentNim === '12410619'
+  ) {
+    return {
+      ...plan,
+      studentName: 'Syalom Mauren Angginaloy',
+      studentNim: '12410619',
+    };
+  }
+
+  return plan;
+});
+
+setStoredItem(STORAGE_KEYS.STUDY_PLANS, updatedStudyPlans);
 
     if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCES)) {
       setStoredItem(STORAGE_KEYS.ATTENDANCES, MOCK_ATTENDANCES);
@@ -1170,10 +1211,17 @@ static reviewAddDropRequest(
   static getStudyPlanByStudentId(
     studentId: string
   ): StudyPlan | undefined {
+    const student = this.getStudentById(studentId);
+
+    if (!student) return undefined;
+
     const plans = this.getStudyPlans();
 
-    return plans.find(
-      (plan) => plan.studentId === studentId
+    return [...plans].reverse().find(
+      (plan) =>
+        plan.studentId === studentId &&
+        plan.semester === student.currentSemester &&
+        plan.academicYear === student.academicYear
     );
   }
 
