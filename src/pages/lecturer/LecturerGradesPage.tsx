@@ -179,17 +179,22 @@ studyPlans
   };
 
   // Search filter
-  const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return students;
-    const q = searchQuery.toLowerCase();
-    return students.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.nim.toLowerCase().includes(q)
-    );
-  }, [students, searchQuery]);
+// Search filter: hanya mahasiswa dengan KRS yang disetujui
+const filteredStudents = useMemo(() => {
+  if (!searchQuery.trim()) return classStudents;
+
+  const q = searchQuery.toLowerCase();
+
+  return classStudents.filter(
+    (s) =>
+      s.name.toLowerCase().includes(q) ||
+      s.nim.toLowerCase().includes(q)
+  );
+}, [classStudents, searchQuery]);
 
   // Class analytics
   const analytics = useMemo(() => {
-    const scores = students.map((std) => {
+    const scores = classStudents.map((std) => {
       const v = gradesInput[std.id] || { tugas: 80, uts: 80, uas: 80 };
       return calculateFinal(v.tugas, v.uts, v.uas);
     });
@@ -629,7 +634,7 @@ studyPlans
           </div>
           <div>
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Mahasiswa Dinilai</p>
-            <p className="text-xl font-extrabold text-slate-900 mt-0.5">{students.length} Mahasiswa</p>
+            <p className="text-xl font-extrabold text-slate-900 mt-0.5">{classStudents.length} Mahasiswa</p>
           </div>
         </div>
       </div>

@@ -175,11 +175,16 @@ export const ReportProblemPage: React.FC = () => {
               key={cat.id}
               className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs"
             >
-              <button
-                type="button"
-                onClick={() => setExpandedId(isOpen ? null : cat.id)}
-                className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-slate-50/60 transition-colors cursor-pointer"
-              >
+  <button
+    type="button"
+    onClick={() => {
+      setExpandedId(isOpen ? null : cat.id);
+      setCategory(cat.id);
+      setError('');
+    }}
+    className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-slate-50/60 transition-colors cursor-pointer"
+  >
+              
                 <div
                   className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${cat.iconTone}`}
                 >
@@ -259,6 +264,50 @@ export const ReportProblemPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+  <label className="block text-xs font-semibold text-slate-700 mb-2">
+    Kategori Masalah <span className="text-red-500">*</span>
+  </label>
+
+  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    {CATEGORIES.map((cat) => {
+      const Icon = cat.icon;
+      const isSelected = category === cat.id;
+
+      return (
+        <button
+          key={cat.id}
+          type="button"
+          onClick={() => {
+            setCategory(cat.id);
+            setError('');
+          }}
+          className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+            isSelected
+              ? 'border-blue-500 bg-blue-50 text-blue-700'
+              : 'border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50'
+          }`}
+        >
+          <Icon className="w-5 h-5 shrink-0" />
+
+          <span className="text-xs font-semibold">
+            {cat.shortLabel}
+          </span>
+
+          {isSelected && (
+            <CheckCircle2 className="w-4 h-4 ml-auto text-blue-600" />
+          )}
+        </button>
+      );
+    })}
+  </div>
+
+  {!category && (
+    <p className="text-[11px] text-slate-400 mt-2">
+      Pilih Presensi, KRS, atau Nilai sesuai masalah yang ingin dilaporkan.
+    </p>
+  )}
+</div>
 <div>
   <label className="block text-xs font-semibold text-slate-700 mb-1.5">
     Mata Kuliah Terkait{' '}
